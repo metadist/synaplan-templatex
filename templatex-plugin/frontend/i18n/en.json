@@ -162,6 +162,10 @@
     "extraction_model": "Extraction Model",
     "validation_model": "Validation Model",
     "lang_de": "Deutsch",
-    "lang_en": "English"
+    "lang_en": "English",
+    "info_title": "System Info",
+    "active_model": "AI Model (Chat)",
+    "model_auto": "Automatic (system default)",
+    "ui_language": "UI Language"
   }
 }

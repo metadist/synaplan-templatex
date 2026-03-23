@@ -11,6 +11,8 @@ export default {
     // =========================================================================
 
     let t = {}
+    let _loadedLang = ''
+    let _langPollTimer = null
     let _pendingTemplateFile = null
 
     let state = {
@@ -22,6 +24,8 @@ export default {
       selectedTemplate: null,
       forms: [],
       selectedForm: null,
+      showNewForm: false,
+      editingForm: null,
       entries: [],
       selectedEntry: null,
       showNewEntry: false,
@@ -49,18 +53,35 @@ export default {
       return val
     }
 
-    async function loadTranslations() {
+    async function loadTranslations(force) {
       const lang = localStorage.getItem('language') || 'en'
+      if (!force && lang === _loadedLang && Object.keys(t).length > 0) return false
       try {
         const res = await fetch(`${ASSET_BASE}/i18n/${lang}.json`)
-        if (res.ok) { t = await res.json(); return }
+        if (res.ok) { t = await res.json(); _loadedLang = lang; return true }
       } catch (_) { /* fallback below */ }
       if (lang !== 'en') {
         try {
           const res = await fetch(`${ASSET_BASE}/i18n/en.json`)
-          if (res.ok) t = await res.json()
+          if (res.ok) { t = await res.json(); _loadedLang = 'en'; return true }
         } catch (_) { /* no translations available */ }
       }
+      return false
+    }
+
+    function startLanguageWatcher() {
+      if (_langPollTimer) return
+      _langPollTimer = setInterval(async () => {
+        const current = localStorage.getItem('language') || 'en'
+        if (current !== _loadedLang) {
+          const changed = await loadTranslations()
+          if (changed && !state.loading) render()
+        }
+      }, 500)
+    }
+
+    function stopLanguageWatcher() {
+      if (_langPollTimer) { clearInterval(_langPollTimer); _langPollTimer = null }
     }
 
     // =========================================================================
@@ -162,11 +183,13 @@ export default {
       forms: 'clipboard', settings: 'gear',
     }
 
-    function navigate(view) {
+    async function navigate(view) {
       state.selectedTemplate = null
       state.selectedForm = null
       state.selectedEntry = null
       state.showNewEntry = false
+      state.showNewForm = false
+      state.editingForm = null
       state.newEntryFormId = null
       state.newEntryFormDef = null
       state.entryVariables = null
@@ -178,6 +201,7 @@ export default {
       _pendingTemplateFile = null
       state.view = view
       window.location.hash = `#tx-${view}`
+      await loadTranslations()
       render()
       loadViewData(view)
     }
@@ -346,9 +370,14 @@ export default {
         : emptyState(ICONS.file, T('templates.title'), T('templates.empty'), T('templates.empty_hint'))
 
       return `<div class="mt-4 space-y-4">
-        <h3 class="text-lg font-medium">${T('templates.title')}</h3>
-        <div id="tx-template-drop" class="rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 p-6 bg-white dark:bg-gray-800 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
-          <div class="flex justify-center mb-2 text-gray-400">${ICONS.upload}</div>
+        <div class="flex items-center justify-between">
+          <h3 class="text-lg font-medium">${T('templates.title')}</h3>
+          <label class="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors cursor-pointer">
+            ${ICONS.upload} ${T('templates.upload')}
+            <input type="file" id="tx-template-file-btn" accept=".docx" class="hidden" />
+          </label>
+        </div>
+        <div id="tx-template-drop" class="rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 p-4 bg-white dark:bg-gray-800 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
           <p class="text-sm text-gray-500 dark:text-gray-400">${T('templates.drop_hint')}</p>
           <input type="file" id="tx-template-file" accept=".docx" class="hidden" />
           <div id="tx-template-upload-form" class="mt-3 hidden">
@@ -410,16 +439,21 @@ export default {
 
     function renderForms() {
       if (state.selectedForm) return renderFormDetail()
+      if (state.showNewForm || state.editingForm) return renderFormEditor()
 
       const rows = state.forms.length > 0
         ? state.forms.map(f => {
           const count = f.fields?.length ?? f.field_count ?? 0
+          const isDefault = f.is_default || f.id === 'default'
           return `
             <div data-select-form="${f.id}" class="rounded-lg border dark:border-gray-700 bg-white dark:bg-gray-800 p-4 hover:shadow-sm transition-shadow cursor-pointer">
               <div class="flex items-center justify-between">
                 <div>
-                  <div class="font-medium">${escHtml(f.name)}${(f.is_default || f.id === 'default') ? ` <span class="text-xs text-gray-400 dark:text-gray-500">(${T('forms.default_form')})</span>` : ''}</div>
+                  <div class="font-medium">${escHtml(f.name)}${isDefault ? ` <span class="text-xs text-gray-400 dark:text-gray-500">(${T('forms.default_form')})</span>` : ''}</div>
                   <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${count} ${T('forms.field_count')} · ${T('app.language')}: ${escHtml(f.language || '—')}</div>
+                </div>
+                <div class="flex items-center gap-1">
+                  ${!isDefault ? `<button data-delete-form="${f.id}" class="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors" title="${T('app.delete')}">${ICONS.trash}</button>` : ''}
                 </div>
               </div>
             </div>`
@@ -427,7 +461,10 @@ export default {
         : emptyState(ICONS.clipboard, T('forms.title'), T('forms.empty'))
 
       return `<div class="mt-4 space-y-4">
-        <h3 class="text-lg font-medium">${T('forms.title')}</h3>
+        <div class="flex items-center justify-between">
+          <h3 class="text-lg font-medium">${T('forms.title')}</h3>
+          <button data-action="new-form" class="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors">${ICONS.plus} ${T('forms.new')}</button>
+        </div>
         <div class="space-y-2">${rows}</div>
       </div>`
     }
@@ -435,6 +472,7 @@ export default {
     function renderFormDetail() {
       const f = state.selectedForm
       const fields = f.fields || []
+      const isDefault = f.is_default || f.id === 'default'
       const rows = fields.map(fd => `
         <tr class="border-t dark:border-gray-700">
           <td class="py-2 px-3 font-mono text-sm">${escHtml(fd.key)}</td>
@@ -446,8 +484,16 @@ export default {
       return `<div class="mt-4 space-y-4">
         <button data-action="back-forms" class="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors">${ICONS.back} ${T('app.back')}</button>
         <div class="rounded-lg border dark:border-gray-700 bg-white dark:bg-gray-800 p-6">
-          <h3 class="text-lg font-medium mb-1">${escHtml(f.name)}${(f.is_default || f.id === 'default') ? ` <span class="text-xs text-gray-400">(${T('forms.default_form')})</span>` : ''}</h3>
-          <div class="text-xs text-gray-500 dark:text-gray-400 mb-4">${T('app.language')}: ${escHtml(f.language || '—')}</div>
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-lg font-medium mb-1">${escHtml(f.name)}${isDefault ? ` <span class="text-xs text-gray-400">(${T('forms.default_form')})</span>` : ''}</h3>
+              <div class="text-xs text-gray-500 dark:text-gray-400">${T('app.language')}: ${escHtml(f.language || '—')}</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button data-action="edit-form" class="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 transition-colors">${ICONS.edit} ${T('app.edit')}</button>
+              ${!isDefault ? `<button data-delete-form="${f.id}" class="flex items-center gap-1 text-sm text-red-600 hover:text-red-700 dark:text-red-400 transition-colors">${ICONS.trash} ${T('app.delete')}</button>` : ''}
+            </div>
+          </div>
           ${fields.length > 0 ? `
             <h4 class="text-sm font-medium mb-2">${T('forms.fields')} (${fields.length})</h4>
             <div class="overflow-x-auto">
@@ -464,6 +510,65 @@ export default {
               </table>
             </div>
           ` : `<p class="text-sm text-gray-400 dark:text-gray-500">${T('forms.fields')}: 0</p>`}
+        </div>
+      </div>`
+    }
+
+    function renderFormEditor() {
+      const editing = state.editingForm
+      const isNew = !editing
+      const name = editing?.name || ''
+      const language = editing?.language || 'de'
+      const fields = editing?.fields || []
+      const fieldTypeOptions = ['text', 'textarea', 'select', 'list', 'date', 'number', 'checkbox'].map(t =>
+        `<option value="${t}">${t}</option>`
+      ).join('')
+
+      const fieldRows = fields.map((fd, idx) => `
+        <div class="flex items-start gap-2 p-3 rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700" data-field-idx="${idx}">
+          <div class="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <input name="fk_${idx}" value="${escHtml(fd.key || '')}" placeholder="${T('forms.field_key')}" class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-500" />
+            <input name="fl_${idx}" value="${escHtml(fd.label || '')}" placeholder="${T('forms.field_label')}" class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-500" />
+            <select name="ft_${idx}" class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-500">
+              ${['text', 'textarea', 'select', 'list', 'date', 'number', 'checkbox'].map(tp =>
+                `<option value="${tp}"${fd.type === tp ? ' selected' : ''}>${tp}</option>`
+              ).join('')}
+            </select>
+            <label class="flex items-center gap-1.5 text-sm text-gray-900 dark:text-gray-100">
+              <input type="checkbox" name="fr_${idx}" ${fd.required ? 'checked' : ''} class="rounded border-gray-300 dark:border-gray-500 text-blue-600 h-4 w-4" />
+              <span>${T('forms.field_required')}</span>
+            </label>
+          </div>
+          <button data-action="remove-form-field" data-idx="${idx}" class="p-1 text-gray-400 hover:text-red-500 transition-colors mt-1" title="${T('forms.remove_field')}">${ICONS.trash}</button>
+        </div>`).join('')
+
+      return `<div class="mt-4 space-y-4">
+        <button data-action="back-forms" class="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors">${ICONS.back} ${T('app.back')}</button>
+        <div class="rounded-lg border dark:border-gray-700 bg-white dark:bg-gray-800 p-6">
+          <h3 class="text-lg font-medium mb-4">${isNew ? T('forms.new') : T('app.edit')}</h3>
+          <form id="tx-form-editor" class="space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">${T('app.name')}</label>
+                <input name="form_name" value="${escHtml(name)}" class="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" required />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">${T('app.language')}</label>
+                <select name="form_language" class="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="de" ${language === 'de' ? 'selected' : ''}>${T('settings.lang_de')}</option>
+                  <option value="en" ${language === 'en' ? 'selected' : ''}>${T('settings.lang_en')}</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <h4 class="text-sm font-medium">${T('forms.fields')}</h4>
+                <button type="button" data-action="add-form-field" class="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 transition-colors">${ICONS.plus} ${T('forms.add_field')}</button>
+              </div>
+              <div id="tx-form-fields" class="space-y-2">${fieldRows}</div>
+            </div>
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors">${T('app.save')}</button>
+          </form>
         </div>
       </div>`
     }
@@ -775,12 +880,12 @@ export default {
       const stationRows = stations.map((s, idx) => {
         const fields = Object.entries(s).map(([k, val]) =>
           `<div class="flex justify-between py-1">
-            <span class="text-xs text-gray-500 dark:text-gray-400">${escHtml(k)}</span>
-            <span class="text-xs font-medium">${escHtml(String(val ?? ''))}</span>
+            <span class="text-xs text-gray-600 dark:text-gray-400">${escHtml(k)}</span>
+            <span class="text-xs font-medium text-gray-900 dark:text-gray-100 text-right max-w-[65%]">${escHtml(String(val ?? ''))}</span>
           </div>`
         ).join('')
-        return `<div class="rounded border dark:border-gray-700 p-3 bg-gray-50 dark:bg-gray-800/50">
-          <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">#${idx + 1}</div>
+        return `<div class="rounded border border-gray-200 dark:border-gray-600 p-3 bg-white dark:bg-gray-700">
+          <div class="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">#${idx + 1}</div>
           ${fields}
         </div>`
       }).join('')
@@ -844,24 +949,48 @@ export default {
 
     function renderSettings() {
       const cfg = state.status?.config || {}
-      return `<div class="mt-4 rounded-lg border dark:border-gray-700 p-6 bg-white dark:bg-gray-800">
-        <h3 class="text-lg font-medium mb-4">${T('settings.title')}</h3>
-        <form id="tx-settings-form" class="space-y-4 max-w-md">
-          ${settingsField('company_name', T('settings.company_name'), cfg.company_name || '')}
-          <div>
-            <label class="block text-sm font-medium mb-1">${T('settings.default_language')}</label>
-            <select name="default_language" class="w-full rounded border dark:border-gray-600 dark:bg-gray-700 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
-              <option value="de" ${cfg.default_language === 'de' ? 'selected' : ''}>${T('settings.lang_de')}</option>
-              <option value="en" ${cfg.default_language === 'en' ? 'selected' : ''}>${T('settings.lang_en')}</option>
-            </select>
+      const modelDisplay = cfg.extraction_model && cfg.extraction_model !== 'default' ? cfg.extraction_model : T('settings.model_auto')
+      return `<div class="mt-4 space-y-4">
+        <div class="rounded-lg border dark:border-gray-700 p-6 bg-white dark:bg-gray-800">
+          <h3 class="text-lg font-medium mb-4">${T('settings.title')}</h3>
+          <form id="tx-settings-form" class="space-y-4 max-w-md">
+            ${settingsField('company_name', T('settings.company_name'), cfg.company_name || '')}
+            <div>
+              <label class="block text-sm font-medium mb-1">${T('settings.default_language')}</label>
+              <select name="default_language" class="w-full rounded border dark:border-gray-600 dark:bg-gray-700 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                <option value="de" ${cfg.default_language === 'de' ? 'selected' : ''}>${T('settings.lang_de')}</option>
+                <option value="en" ${cfg.default_language === 'en' ? 'selected' : ''}>${T('settings.lang_en')}</option>
+              </select>
+            </div>
+            ${settingsField('extraction_model', T('settings.extraction_model'), cfg.extraction_model || 'default')}
+            ${settingsField('validation_model', T('settings.validation_model'), cfg.validation_model || 'default')}
+            <div class="flex items-center gap-3">
+              <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors">${T('app.save')}</button>
+              <span id="tx-settings-msg" class="text-sm text-green-600 dark:text-green-400 hidden">${ICONS.check} ${T('app.saved')}</span>
+            </div>
+          </form>
+        </div>
+        <div class="rounded-lg border dark:border-gray-700 p-6 bg-white dark:bg-gray-800">
+          <h4 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">${T('settings.info_title')}</h4>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between py-1.5 border-b dark:border-gray-700">
+              <span class="text-gray-500 dark:text-gray-400">${T('settings.active_model')}</span>
+              <span class="font-mono font-medium text-gray-900 dark:text-gray-100">${escHtml(modelDisplay)}</span>
+            </div>
+            <div class="flex justify-between py-1.5 border-b dark:border-gray-700">
+              <span class="text-gray-500 dark:text-gray-400">${T('settings.default_language')}</span>
+              <span class="font-medium text-gray-900 dark:text-gray-100">${cfg.default_language === 'de' ? T('settings.lang_de') : T('settings.lang_en')}</span>
+            </div>
+            <div class="flex justify-between py-1.5 border-b dark:border-gray-700">
+              <span class="text-gray-500 dark:text-gray-400">${T('settings.company_name')}</span>
+              <span class="font-medium text-gray-900 dark:text-gray-100">${escHtml(cfg.company_name || T('dashboard.not_set'))}</span>
+            </div>
+            <div class="flex justify-between py-1.5">
+              <span class="text-gray-500 dark:text-gray-400">${T('settings.ui_language')}</span>
+              <span class="font-medium text-gray-900 dark:text-gray-100">${_loadedLang === 'de' ? T('settings.lang_de') : _loadedLang === 'en' ? T('settings.lang_en') : _loadedLang}</span>
+            </div>
           </div>
-          ${settingsField('extraction_model', T('settings.extraction_model'), cfg.extraction_model || 'default')}
-          ${settingsField('validation_model', T('settings.validation_model'), cfg.validation_model || 'default')}
-          <div class="flex items-center gap-3">
-            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors">${T('app.save')}</button>
-            <span id="tx-settings-msg" class="text-sm text-green-600 dark:text-green-400 hidden">${ICONS.check} ${T('app.saved')}</span>
-          </div>
-        </form>
+        </div>
       </div>`
     }
 
@@ -965,10 +1094,114 @@ export default {
         })
       }
 
+      // --- Template: file button (header button) ---
+      const tplFileBtn = el.querySelector('#tx-template-file-btn')
+      if (tplFileBtn) {
+        tplFileBtn.addEventListener('change', () => {
+          if (tplFileBtn.files[0]) handleTemplateFile(tplFileBtn.files[0])
+        })
+      }
+
       // --- Form: select ---
       el.querySelectorAll('[data-select-form]').forEach(row =>
-        row.addEventListener('click', () => handleSelectForm(row.dataset.selectForm))
+        row.addEventListener('click', e => {
+          if (e.target.closest('[data-delete-form]')) return
+          handleSelectForm(row.dataset.selectForm)
+        })
       )
+
+      // --- Form: new ---
+      el.querySelector('[data-action="new-form"]')
+        ?.addEventListener('click', () => { state.showNewForm = true; state.editingForm = null; render() })
+
+      // --- Form: edit ---
+      el.querySelector('[data-action="edit-form"]')
+        ?.addEventListener('click', () => {
+          if (state.selectedForm) {
+            state.editingForm = JSON.parse(JSON.stringify(state.selectedForm))
+            state.selectedForm = null
+            render()
+          }
+        })
+
+      // --- Form: delete ---
+      el.querySelectorAll('[data-delete-form]').forEach(btn =>
+        btn.addEventListener('click', async e => {
+          e.stopPropagation()
+          if (!confirm(T('forms.confirm_delete'))) return
+          try {
+            await api(`/forms/${btn.dataset.deleteForm}`, { method: 'DELETE' })
+            state.selectedForm = null
+            showToast(T('app.saved'))
+            await fetchForms()
+            render()
+          } catch (err) { showToast(err.message, 'error') }
+        })
+      )
+
+      // --- Form editor: add field ---
+      el.querySelector('[data-action="add-form-field"]')
+        ?.addEventListener('click', () => {
+          const form = state.editingForm || { name: '', language: 'de', fields: [] }
+          if (!form.fields) form.fields = []
+          form.fields.push({ key: '', label: '', type: 'text', required: false })
+          state.editingForm = form
+          state.showNewForm = !state.editingForm?.id
+          render()
+        })
+
+      // --- Form editor: remove field ---
+      el.querySelectorAll('[data-action="remove-form-field"]').forEach(btn =>
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.dataset.idx)
+          const form = state.editingForm
+          if (form?.fields) {
+            form.fields.splice(idx, 1)
+            render()
+          }
+        })
+      )
+
+      // --- Form editor: submit ---
+      const formEditor = el.querySelector('#tx-form-editor')
+      if (formEditor) {
+        formEditor.addEventListener('submit', async e => {
+          e.preventDefault()
+          const fd = new FormData(formEditor)
+          const name = fd.get('form_name')?.toString().trim()
+          const language = fd.get('form_language')?.toString() || 'de'
+          if (!name) return
+          const fields = []
+          let idx = 0
+          while (fd.has(`fk_${idx}`)) {
+            const key = fd.get(`fk_${idx}`)?.toString().trim()
+            if (key) {
+              fields.push({
+                key,
+                label: fd.get(`fl_${idx}`)?.toString().trim() || key,
+                type: fd.get(`ft_${idx}`)?.toString() || 'text',
+                required: fd.has(`fr_${idx}`),
+                source: 'form',
+              })
+            }
+            idx++
+          }
+          try {
+            const editing = state.editingForm
+            if (editing?.id) {
+              await api(`/forms/${editing.id}`, { method: 'PUT', body: JSON.stringify({ name, language, fields }) })
+            } else {
+              await api('/forms', { method: 'POST', body: JSON.stringify({ name, language, fields }) })
+            }
+            state.showNewForm = false
+            state.editingForm = null
+            state.selectedForm = null
+            showToast(T('app.saved'))
+            await fetchForms()
+            render()
+          } catch (err) { showToast(err.message, 'error') }
+        })
+      }
 
       // --- Entry: select ---
       el.querySelectorAll('[data-select-entry]').forEach(row =>
@@ -1146,7 +1379,7 @@ export default {
         ?.addEventListener('click', () => { state.selectedTemplate = null; render() })
 
       el.querySelector('[data-action="back-forms"]')
-        ?.addEventListener('click', () => { state.selectedForm = null; render() })
+        ?.addEventListener('click', () => { state.selectedForm = null; state.showNewForm = false; state.editingForm = null; render() })
 
       el.querySelector('[data-action="back-entries"]')
         ?.addEventListener('click', () => {
@@ -1366,6 +1599,7 @@ export default {
 
     async function init() {
       await loadTranslations()
+      startLanguageWatcher()
       resolveRoute()
       render()
 
