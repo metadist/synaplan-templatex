@@ -648,25 +648,23 @@ export default {
         `<option value="${f.id}"${state.newEntryFormId == f.id ? ' selected' : ''}>${escHtml(f.name)}</option>`
       ).join('')
 
-      let fieldsHtml = ''
-      if (state.newEntryFormDef?.fields) {
-        fieldsHtml = state.newEntryFormDef.fields.map(renderFormField).join('')
-      }
-
       return `<div class="mt-4 space-y-4">
         <button data-action="back-entries" class="flex items-center gap-1 text-sm transition-colors" style="color:var(--txt-secondary)">${ICONS.back} ${T('app.back')}</button>
         <div class="tx-card p-6">
           <h3 class="text-lg font-medium mb-4">${T('entries.new')}</h3>
-          <form id="tx-new-entry-form" class="space-y-4 max-w-lg">
+          <form id="tx-new-entry-form" class="space-y-4 max-w-md">
             <div>
-              <label class="block text-sm font-medium mb-1">${T('entries.form')}</label>
-              <select id="tx-entry-form-select" class="tx-select">
-                <option value="">— ${T('entries.form')} —</option>
+              <label class="tx-label">${T('app.name')}</label>
+              <input name="entry_name" class="tx-input" placeholder="${T('entries.name_placeholder')}" required />
+            </div>
+            <div>
+              <label class="tx-label">${T('entries.form')}</label>
+              <select id="tx-entry-form-select" name="entry_form" class="tx-select">
                 ${formOptions}
               </select>
             </div>
-            <div id="tx-entry-fields" class="space-y-3">${fieldsHtml}</div>
-            ${state.newEntryFormDef ? `<button type="submit" class="tx-btn">${T('app.save')}</button>` : ''}
+            <p class="text-xs tx-secondary">${T('entries.new_hint')}</p>
+            <button type="submit" class="tx-btn">${T('entries.create_and_open')}</button>
           </form>
         </div>
       </div>`
@@ -748,23 +746,90 @@ export default {
 
     function renderEntryDataSection(entry) {
       const formData = entry.field_values || {}
-      const keys = Object.keys(formData)
-      const dataRows = keys.map(key => {
-        let val = formData[key]
-        if (Array.isArray(val)) val = val.join(', ')
-        else if (typeof val === 'boolean') val = val ? T('app.yes') : T('app.no')
-        else val = String(val ?? '')
-        return `<div class="flex justify-between py-2 tx-divider border-b last:border-0">
-          <span class="text-sm tx-secondary">${escHtml(key)}</span>
-          <span class="text-sm font-medium text-right max-w-[60%]">${escHtml(val)}</span>
-        </div>`
-      }).join('')
+      const formDef = state.forms.find(f => f.id === entry.form_id)
+      const fields = formDef?.fields || []
+
+      let fieldsHtml = ''
+      if (fields.length > 0) {
+        fieldsHtml = fields.map(field => {
+          const val = formData[field.key]
+          return renderFormFieldWithValue(field, val)
+        }).join('')
+      } else {
+        const keys = Object.keys(formData)
+        fieldsHtml = keys.map(key => {
+          let val = formData[key]
+          if (Array.isArray(val)) val = val.join(', ')
+          else if (typeof val === 'boolean') val = val ? T('app.yes') : T('app.no')
+          else val = String(val ?? '')
+          return `<div class="flex justify-between py-2 tx-divider border-b last:border-0">
+            <span class="text-sm tx-secondary">${escHtml(key)}</span>
+            <span class="text-sm font-medium text-right max-w-[60%]">${escHtml(val)}</span>
+          </div>`
+        }).join('')
+      }
+
       return `<div class="tx-card p-6">
         <h4 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3 flex items-center gap-2">${ICONS.clipboard} ${T('entries.section_data')}</h4>
-        ${keys.length > 0
-          ? `<div class="rounded border dark:border-gray-700 divide-y dark:divide-gray-700 px-3">${dataRows}</div>`
-          : `<p class="text-sm tx-secondary">${T('app.no_data')}</p>`}
+        ${fields.length > 0
+          ? `<form id="tx-entry-data-form" class="space-y-3 max-w-lg">${fieldsHtml}
+              <button type="submit" class="tx-btn tx-btn-sm">${T('app.save')}</button>
+            </form>`
+          : (Object.keys(formData).length > 0
+            ? `<div class="rounded border dark:border-gray-700 divide-y dark:divide-gray-700 px-3">${fieldsHtml}</div>`
+            : `<p class="text-sm tx-secondary">${T('app.no_data')}</p>`)}
       </div>`
+    }
+
+    function renderFormFieldWithValue(field, value) {
+      const fid = `tx-field-${escHtml(field.key)}`
+      const req = field.required ? 'required' : ''
+      const reqMark = field.required ? ' <span class="text-red-500">*</span>' : ''
+      const hint = field.hint ? `<p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">${escHtml(field.hint)}</p>` : ''
+
+      if (field.type === 'checkbox') {
+        const checked = value === true || value === 'true' || value === 'Ja'
+        return `<div>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="${fid}" name="${escHtml(field.key)}" ${checked ? 'checked' : ''} class="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 h-4 w-4" />
+            <span class="text-sm font-medium">${escHtml(field.label || field.key)}${reqMark}</span>
+          </label>${hint}
+        </div>`
+      }
+
+      const label = `<label for="${fid}" class="tx-label">${escHtml(field.label || field.key)}${reqMark}</label>`
+      let input
+
+      switch (field.type) {
+        case 'textarea':
+          input = `<textarea id="${fid}" name="${escHtml(field.key)}" class="tx-input" rows="3" ${req}>${escHtml(String(value ?? ''))}</textarea>`
+          break
+        case 'select': {
+          const opts = (field.options || []).map(o => {
+            const optVal = typeof o === 'object' ? o.value : o
+            const optLbl = typeof o === 'object' ? (o.label || o.value) : o
+            const selected = String(value) === String(optVal) ? ' selected' : ''
+            return `<option value="${escHtml(optVal)}"${selected}>${escHtml(optLbl)}</option>`
+          }).join('')
+          input = `<select id="${fid}" name="${escHtml(field.key)}" class="tx-select" ${req}><option value="">—</option>${opts}</select>`
+          break
+        }
+        case 'list': {
+          const listVal = Array.isArray(value) ? value.join('\n') : String(value ?? '')
+          input = `<textarea id="${fid}" name="${escHtml(field.key)}" class="tx-input" rows="3" placeholder="${T('forms.list_placeholder')}" ${req}>${escHtml(listVal)}</textarea>`
+          break
+        }
+        case 'date':
+          input = `<input type="date" id="${fid}" name="${escHtml(field.key)}" value="${escHtml(String(value ?? ''))}" class="tx-input" ${req} />`
+          break
+        case 'number':
+          input = `<input type="number" id="${fid}" name="${escHtml(field.key)}" value="${escHtml(String(value ?? ''))}" class="tx-input" ${req} />`
+          break
+        default:
+          input = `<input type="text" id="${fid}" name="${escHtml(field.key)}" value="${escHtml(String(value ?? ''))}" class="tx-input" ${req} />`
+      }
+
+      return `<div>${label}${input}${hint}</div>`
     }
 
     // --- Section: Files ---
@@ -1311,31 +1376,53 @@ export default {
         })
       }
 
-      // --- New entry: form submission ---
+      // --- New entry: form submission -> create and open detail ---
       const newEntryForm = el.querySelector('#tx-new-entry-form')
       if (newEntryForm) {
         newEntryForm.addEventListener('submit', async e => {
           e.preventDefault()
-          if (!state.newEntryFormId || !state.newEntryFormDef) return
-          const formData = {}
-          for (const field of (state.newEntryFormDef.fields || [])) {
-            const input = newEntryForm.querySelector(`[name="${field.key}"]`)
-            if (!input) continue
-            if (field.type === 'checkbox') formData[field.key] = input.checked
-            else if (field.type === 'list') formData[field.key] = input.value.split('\n').map(s => s.trim()).filter(Boolean)
-            else formData[field.key] = input.value
-          }
+          const fd = new FormData(newEntryForm)
+          const entryName = fd.get('entry_name')?.toString().trim() || ''
+          const formId = fd.get('entry_form')?.toString() || state.forms[0]?.id || 'default'
+          if (!entryName) return
           try {
-            const nameField = formData['target-position'] || formData['fullname'] || formData['name'] || ''
-            await api('/candidates', {
+            const res = await api('/candidates', {
               method: 'POST',
-              body: JSON.stringify({ form_id: state.newEntryFormId, field_values: formData, name: nameField }),
+              body: JSON.stringify({ form_id: formId, field_values: {}, name: entryName }),
             })
-            showToast(T('app.saved'))
             state.showNewEntry = false
             state.newEntryFormId = null
             state.newEntryFormDef = null
             await fetchEntries()
+            await handleSelectEntry(res.candidate.id)
+          } catch (err) { showToast(err.message, 'error') }
+        })
+      }
+
+      // --- Entry detail: file uploads ---
+      // --- Entry detail: save form data ---
+      const entryDataForm = el.querySelector('#tx-entry-data-form')
+      if (entryDataForm && state.selectedEntry) {
+        entryDataForm.addEventListener('submit', async e => {
+          e.preventDefault()
+          const formDef = state.forms.find(f => f.id === state.selectedEntry.form_id)
+          const fields = formDef?.fields || []
+          const fieldValues = {}
+          for (const field of fields) {
+            const input = entryDataForm.querySelector(`[name="${field.key}"]`)
+            if (!input) continue
+            if (field.type === 'checkbox') fieldValues[field.key] = input.checked
+            else if (field.type === 'list') fieldValues[field.key] = input.value.split('\n').map(s => s.trim()).filter(Boolean)
+            else fieldValues[field.key] = input.value
+          }
+          try {
+            await api(`/candidates/${state.selectedEntry.id}`, {
+              method: 'PUT',
+              body: JSON.stringify({ field_values: fieldValues, name: fieldValues['target-position'] || fieldValues['fullname'] || state.selectedEntry.name }),
+            })
+            showToast(T('app.saved'))
+            const d = await api(`/candidates/${state.selectedEntry.id}`)
+            state.selectedEntry = d.candidate
             render()
           } catch (err) { showToast(err.message, 'error') }
         })
