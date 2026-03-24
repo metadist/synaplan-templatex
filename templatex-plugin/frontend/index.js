@@ -27,6 +27,9 @@ export default {
       showNewForm: false,
       editingForm: null,
       entries: [],
+      entriesSearch: '',
+      entriesSortNewest: true,
+      entriesPage: 0,
       selectedEntry: null,
       showNewEntry: false,
       newEntryFormId: null,
@@ -57,13 +60,14 @@ export default {
     async function loadTranslations(force) {
       const lang = localStorage.getItem('language') || 'en'
       if (!force && lang === _loadedLang && Object.keys(t).length > 0) return false
+      const cb = `?v=${TX_VERSION}`
       try {
-        const res = await fetch(`${ASSET_BASE}/i18n/${lang}.json`)
+        const res = await fetch(`${ASSET_BASE}/i18n/${lang}.json${cb}`)
         if (res.ok) { t = await res.json(); _loadedLang = lang; return true }
       } catch (_) { /* fallback below */ }
       if (lang !== 'en') {
         try {
-          const res = await fetch(`${ASSET_BASE}/i18n/en.json`)
+          const res = await fetch(`${ASSET_BASE}/i18n/en.json${cb}`)
           if (res.ok) { t = await res.json(); _loadedLang = 'en'; return true }
         } catch (_) { /* no translations available */ }
       }
@@ -91,6 +95,7 @@ export default {
 
     async function api(path, opts = {}) {
       const res = await fetch(`${BASE}${path}`, {
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json', ...opts.headers },
         ...opts,
       })
@@ -105,7 +110,7 @@ export default {
       const fd = new FormData()
       fd.append('file', file)
       for (const [k, v] of Object.entries(extraFields)) fd.append(k, v)
-      const res = await fetch(`${BASE}${path}`, { method: 'POST', body: fd })
+      const res = await fetch(`${BASE}${path}`, { method: 'POST', credentials: 'include', body: fd })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error || `HTTP ${res.status}`)
@@ -189,6 +194,9 @@ export default {
       state.selectedForm = null
       state.selectedEntry = null
       state.showNewEntry = false
+      state.entriesSearch = ''
+      state.entriesSortNewest = true
+      state.entriesPage = 0
       state.showNewForm = false
       state.editingForm = null
       state.newEntryFormId = null
@@ -239,6 +247,9 @@ export default {
       edit:      '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>',
       chevDown:  '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>',
       chevRight: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>',
+      sortDown:  '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4 4m0 0l4-4m-4 4V4"/></svg>',
+      sortUp:    '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h9m5-4v12m0-12l4-4m-4 4l-4-4"/></svg>',
+      search:    '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>',
     }
 
     // =========================================================================
@@ -614,12 +625,57 @@ export default {
     // Entries view
     // =========================================================================
 
+    function entrySearchText(entry) {
+      const parts = [entryDisplayName(entry)]
+      const fv = entry.field_values || {}
+      const ai = entry.ai_extracted || {}
+      if (fv['target-position']) parts.push(fv['target-position'])
+      if (fv.currentposition) parts.push(fv.currentposition)
+      if (ai.currentposition) parts.push(ai.currentposition)
+      if (ai.address1) parts.push(ai.address1)
+      if (ai.address2) parts.push(ai.address2)
+      if (ai.zip) parts.push(ai.zip)
+      if (fv.nationality) parts.push(fv.nationality)
+      return parts.join(' ').toLowerCase()
+    }
+
+    function getFilteredSortedEntries() {
+      let list = [...state.entries]
+      const q = state.entriesSearch.trim().toLowerCase()
+      if (q) {
+        const terms = q.split(/\s+/)
+        list = list.filter(e => {
+          const hay = entrySearchText(e)
+          return terms.every(t => hay.includes(t))
+        })
+      }
+      list.sort((a, b) => {
+        const ta = new Date(a.created_at || 0).getTime()
+        const tb = new Date(b.created_at || 0).getTime()
+        return state.entriesSortNewest ? tb - ta : ta - tb
+      })
+      return list
+    }
+
+    const ENTRIES_PER_PAGE = 30
+
     function renderEntries() {
       if (state.selectedEntry) return renderEntryDetail()
       if (state.showNewEntry) return renderNewEntry()
 
-      const rows = state.entries.length > 0
-        ? state.entries.map(e => `
+      const filtered = getFilteredSortedEntries()
+      const hasEntries = state.entries.length > 0
+      const hasResults = filtered.length > 0
+      const sortIcon = state.entriesSortNewest ? ICONS.sortDown : ICONS.sortUp
+      const sortLabel = state.entriesSortNewest ? T('entries.sort_newest') : T('entries.sort_oldest')
+
+      const totalPages = Math.max(1, Math.ceil(filtered.length / ENTRIES_PER_PAGE))
+      if (state.entriesPage >= totalPages) state.entriesPage = Math.max(0, totalPages - 1)
+      const pageStart = state.entriesPage * ENTRIES_PER_PAGE
+      const pageEntries = filtered.slice(pageStart, pageStart + ENTRIES_PER_PAGE)
+
+      const rows = hasResults
+        ? pageEntries.map(e => `
           <div data-select-entry="${e.id}" class="tx-row p-4 cursor-pointer">
             <div class="flex items-center justify-between">
               <div>
@@ -629,17 +685,81 @@ export default {
               <div class="flex items-center gap-3">
                 ${statusBadge(e.status || 'draft')}
                 <span class="text-xs ${entryHasDoc(e) ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'}">${entryHasDoc(e) ? T('entries.doc_uploaded') : T('entries.doc_missing')}</span>
+                <button data-delete-entry="${e.id}" class="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors" title="${T('app.delete')}">${ICONS.trash}</button>
               </div>
             </div>
           </div>`).join('')
-        : emptyState(ICONS.users, T('entries.title'), T('entries.empty'), T('entries.empty_hint'))
+        : (hasEntries
+          ? `<div class="text-center py-8 tx-secondary text-sm">${T('entries.no_results')}</div>`
+          : emptyState(ICONS.users, T('entries.title'), T('entries.empty'), T('entries.empty_hint')))
+
+      const toolbar = hasEntries ? `
+        <div class="flex items-center gap-2">
+          <div class="relative flex-1">
+            <span class="absolute top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" style="left:12px">${ICONS.search}</span>
+            <input id="tx-entries-search" type="text" value="${escHtml(state.entriesSearch)}" placeholder="${T('entries.search_placeholder')}" class="tx-input" style="padding-left:36px" />
+          </div>
+          <button id="tx-entries-sort" class="tx-btn-ghost tx-btn-sm flex items-center gap-1 whitespace-nowrap" title="${sortLabel}" style="border:1px solid var(--divider);border-radius:.375rem;padding:.5rem .75rem">
+            ${sortIcon} <span class="text-xs">${sortLabel}</span>
+          </button>
+        </div>
+        ${hasResults ? `<div class="text-xs tx-secondary">${filtered.length} / ${state.entries.length} ${T('entries.title').toLowerCase()}</div>` : ''}
+      ` : ''
+
+      const pagination = (hasResults && totalPages > 1) ? renderPagination(state.entriesPage, totalPages, filtered.length) : ''
 
       return `<div class="mt-4 space-y-4">
         <div class="flex items-center justify-between">
           <h3 class="text-lg font-medium">${T('entries.title')}</h3>
           <button data-action="new-entry" class="tx-btn tx-btn-sm">${ICONS.plus} ${T('entries.new')}</button>
         </div>
+        ${toolbar}
         <div class="space-y-2">${rows}</div>
+        ${pagination}
+      </div>`
+    }
+
+    function renderPagination(current, totalPages, totalItems) {
+      const from = current * ENTRIES_PER_PAGE + 1
+      const to = Math.min((current + 1) * ENTRIES_PER_PAGE, totalItems)
+      const isFirst = current === 0
+      const isLast = current >= totalPages - 1
+
+      const btnCls = 'inline-flex items-center justify-center rounded transition-colors'
+      const btnStyle = 'min-width:2rem;height:2rem;font-size:.8125rem;'
+      const activeCls = 'font-semibold'
+
+      let pages = []
+      if (totalPages <= 7) {
+        for (let i = 0; i < totalPages; i++) pages.push(i)
+      } else {
+        pages.push(0)
+        if (current > 2) pages.push(-1)
+        const lo = Math.max(1, current - 1)
+        const hi = Math.min(totalPages - 2, current + 1)
+        for (let i = lo; i <= hi; i++) pages.push(i)
+        if (current < totalPages - 3) pages.push(-1)
+        pages.push(totalPages - 1)
+      }
+
+      const pageButtons = pages.map(p => {
+        if (p === -1) return `<span class="px-1 tx-secondary" style="font-size:.8125rem">…</span>`
+        const active = p === current
+        const bg = active ? 'background:var(--brand);color:#fff;' : 'color:var(--txt-primary);'
+        const hover = active ? '' : ' hover:bg-gray-100 dark:hover:bg-gray-700'
+        return `<button data-page="${p}" class="${btnCls}${hover} ${active ? activeCls : ''}" style="${btnStyle}${bg}">${p + 1}</button>`
+      }).join('')
+
+      const prevStyle = isFirst ? 'opacity:.35;pointer-events:none;' : 'cursor:pointer;'
+      const nextStyle = isLast ? 'opacity:.35;pointer-events:none;' : 'cursor:pointer;'
+
+      return `<div class="flex items-center justify-between pt-2" style="border-top:1px solid var(--divider)">
+        <span class="text-xs tx-secondary">${from}–${to} / ${totalItems}</span>
+        <div class="flex items-center gap-1">
+          <button data-page-prev class="${btnCls}" style="${btnStyle}${prevStyle}color:var(--txt-primary);" ${isFirst ? 'disabled' : ''}>${ICONS.back}</button>
+          ${pageButtons}
+          <button data-page-next class="${btnCls}" style="${btnStyle}${nextStyle}color:var(--txt-primary);transform:scaleX(-1);" ${isLast ? 'disabled' : ''}>${ICONS.back}</button>
+        </div>
       </div>`
     }
 
@@ -1325,6 +1445,45 @@ export default {
         })
       }
 
+      // --- Entry: search ---
+      const entriesSearchInput = el.querySelector('#tx-entries-search')
+      if (entriesSearchInput) {
+        entriesSearchInput.addEventListener('input', () => {
+          state.entriesSearch = entriesSearchInput.value
+          state.entriesPage = 0
+          render()
+          const inp = el.querySelector('#tx-entries-search')
+          if (inp) { inp.focus(); inp.selectionStart = inp.selectionEnd = inp.value.length }
+        })
+      }
+
+      // --- Entry: sort toggle ---
+      const entriesSortBtn = el.querySelector('#tx-entries-sort')
+      if (entriesSortBtn) {
+        entriesSortBtn.addEventListener('click', () => {
+          state.entriesSortNewest = !state.entriesSortNewest
+          state.entriesPage = 0
+          render()
+        })
+      }
+
+      // --- Entry: pagination ---
+      el.querySelectorAll('[data-page]').forEach(btn =>
+        btn.addEventListener('click', () => {
+          state.entriesPage = parseInt(btn.dataset.page)
+          render()
+          el.querySelector('#tx-entries-search')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        })
+      )
+      el.querySelector('[data-page-prev]')?.addEventListener('click', () => {
+        if (state.entriesPage > 0) { state.entriesPage--; render() }
+      })
+      el.querySelector('[data-page-next]')?.addEventListener('click', () => {
+        const filtered = getFilteredSortedEntries()
+        const totalPages = Math.ceil(filtered.length / ENTRIES_PER_PAGE)
+        if (state.entriesPage < totalPages - 1) { state.entriesPage++; render() }
+      })
+
       // --- Entry: select ---
       el.querySelectorAll('[data-select-entry]').forEach(row =>
         row.addEventListener('click', () => handleSelectEntry(row.dataset.selectEntry))
@@ -1789,8 +1948,8 @@ export default {
           return
         }
         state.status = data
-        state.loading = false
         await Promise.all([fetchForms(), fetchTemplates(), fetchEntries()])
+        state.loading = false
         loadViewData(state.view)
       } catch (err) {
         state.error = err.message
