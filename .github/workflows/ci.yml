@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint & Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          tools: php-cs-fixer
+          coverage: none
+
+      - name: PHP formatting check (PSR-12)
+        run: |
+          php-cs-fixer fix \
+            --dry-run --diff \
+            --rules=@PSR12 \
+            --using-cache=no \
+            templatex-plugin/backend/
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install prettier
+        run: npm install --no-save prettier
+
+      - name: JS formatting check
+        run: npx prettier --check 'templatex-plugin/frontend/**/*.js'
+
+      - name: Validate i18n JSON files parse correctly
+        run: |
+          for f in templatex-plugin/frontend/i18n/*.json; do
+            echo "Validating $f..."
+            python3 -m json.tool "$f" > /dev/null || { echo "FAIL: $f is not valid JSON"; exit 1; }
+          done
+          echo "All i18n files are valid JSON."
+
+      - name: Validate i18n key consistency
+        run: |
+          python3 - <<'PYEOF'
+          import json, sys, os
+
+          i18n_dir = "templatex-plugin/frontend/i18n"
+          ref_file = os.path.join(i18n_dir, "en.json")
+
+          def collect_keys(obj, prefix=""):
+              keys = set()
+              for k, v in obj.items():
+                  full = f"{prefix}.{k}" if prefix else k
+                  if isinstance(v, dict):
+                      keys |= collect_keys(v, full)
+                  else:
+                      keys.add(full)
+              return keys
+
+          with open(ref_file) as f:
+              ref_keys = collect_keys(json.load(f))
+          print(f"Reference (en.json): {len(ref_keys)} keys")
+
+          ok = True
+          for fname in sorted(os.listdir(i18n_dir)):
+              if fname == "en.json" or not fname.endswith(".json"):
+                  continue
+              fpath = os.path.join(i18n_dir, fname)
+              with open(fpath) as f:
+                  lang_keys = collect_keys(json.load(f))
+
+              missing = ref_keys - lang_keys
+              extra = lang_keys - ref_keys
+
+              if missing:
+                  print(f"FAIL {fname}: missing {len(missing)} keys: {sorted(missing)[:10]}")
+                  ok = False
+              if extra:
+                  print(f"WARN {fname}: {len(extra)} extra keys (not in en.json)")
+
+              if not missing and not extra:
+                  print(f"OK   {fname}: {len(lang_keys)} keys match")
+
+          if not ok:
+              sys.exit(1)
+          print("All language files have matching keys.")
+          PYEOF

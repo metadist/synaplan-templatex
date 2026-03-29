@@ -1084,52 +1084,27 @@ class TemplateXController extends AbstractController
             $variables = $resolved['variables'];
             $stationCount = $resolved['station_count'];
 
+            $stations = $entry['ai_extracted']['stations'] ?? [];
+            if (isset($entry['variable_overrides']['stations']) && is_array($entry['variable_overrides']['stations'])) {
+                $stations = $entry['variable_overrides']['stations'];
+            }
+
+            $arrays = $this->collectArrayData($entry, $stations);
+
             $cleanedPath = $this->cleanTemplateMacros($templatePath);
 
             $tp = new TemplateProcessor($cleanedPath);
             $tp->setMacroOpeningChars('{{');
             $tp->setMacroClosingChars('}}');
 
-            $stations = $entry['ai_extracted']['stations'] ?? [];
-            if (isset($entry['variable_overrides']['stations']) && is_array($entry['variable_overrides']['stations'])) {
-                $stations = $entry['variable_overrides']['stations'];
-            }
+            $templatePlaceholders = $tp->getVariables();
+            $classified = $this->classifyTemplatePlaceholders($templatePlaceholders, $variables, $arrays);
 
-            if ($stationCount > 0) {
-                $tp->cloneRow('stations.time.N', $stationCount);
-                for ($i = 0; $i < $stationCount; $i++) {
-                    $num = $i + 1;
-                    $station = $stations[$i] ?? [];
-                    $tp->setValue('stations.time.N#' . $num, $station['time'] ?? '');
-                    $tp->setValue('stations.employer.N#' . $num, $station['employer'] ?? '');
-                    $details = $station['details'] ?? '';
-                    $details = str_replace("\n", '</w:t><w:br/><w:t>', $details);
-                    $tp->setValue('stations.details.N#' . $num, $details);
-                }
-            }
-
-            $checkboxKeys = ['moving', 'commute', 'travel'];
-            foreach ($checkboxKeys as $cbKey) {
-                $yesVal = $variables["checkb.{$cbKey}.yes"] ?? false;
-                $tp->setCheckbox("checkb.{$cbKey}.yes", (bool) $yesVal);
-                $tp->setCheckbox("checkb.{$cbKey}.no", !(bool) $yesVal);
-            }
-
-            $listKeys = ['relevantposlist', 'relevantfortargetposlist', 'languageslist', 'otherskillslist', 'benefits'];
-            foreach ($listKeys as $listKey) {
-                $val = $variables[$listKey] ?? null;
-                $listText = is_array($val) ? implode("\n", $val) : (string) ($val ?? '');
-                $listText = str_replace("\n", '</w:t><w:br/><w:t>', $listText);
-                $tp->setValue($listKey, $listText);
-            }
-
-            $skipKeys = $listKeys;
-            foreach ($variables as $key => $value) {
-                if (str_starts_with($key, 'stations.') || str_starts_with($key, 'checkb.') || in_array($key, $skipKeys, true)) {
-                    continue;
-                }
-                $tp->setValue($key, (string) ($value ?? ''));
-            }
+            $this->processRowGroups($tp, $classified['rowGroups'], $arrays);
+            $this->processBlockGroups($tp, $classified['blockGroups'], $arrays);
+            $this->processCheckboxes($tp, $classified['checkboxes'], $variables);
+            $this->processLists($tp, $classified['lists'], $variables);
+            $this->processScalars($tp, $classified['scalars'], $variables);
 
             $docId = 'doc_' . bin2hex(random_bytes(6));
             $genDir = $this->uploadDir . '/' . $userId . '/templatex/candidates/' . $candidateId . '/generated';
@@ -1371,10 +1346,13 @@ class TemplateXController extends AbstractController
 
     private function classifyPlaceholder(string $key): string
     {
-        if (str_starts_with($key, 'stations.')) {
-            return 'station_field';
+        if (str_starts_with($key, '#') || str_starts_with($key, '/')) {
+            return 'block_marker';
         }
-        if (str_starts_with($key, 'checkb')) {
+        if (str_contains($key, '.') && !str_starts_with($key, 'checkb') && !str_starts_with($key, 'optional.')) {
+            return 'row_field';
+        }
+        if (str_starts_with($key, 'checkb.')) {
             return 'checkbox';
         }
         if (str_ends_with($key, 'list')) {
@@ -1621,6 +1599,247 @@ class TemplateXController extends AbstractController
         }
 
         return [];
+    }
+
+    /**
+     * Collect array/repeating-group data from the entry.
+     * Each key maps to an array of associative arrays (rows) or flat string arrays (lists).
+     *
+     * @return array<string, array<int, array<string, string>|string>>
+     */
+    private function collectArrayData(array $entry, array $stations): array
+    {
+        $arrays = [];
+
+        if (!empty($stations)) {
+            $arrays['stations'] = $stations;
+        }
+
+        $formData = $entry['field_values'] ?? [];
+        $aiData = $entry['ai_extracted'] ?? [];
+        $overrides = $entry['variable_overrides'] ?? [];
+
+        $listCandidates = [
+            'relevantposlist', 'relevantfortargetposlist',
+            'languageslist', 'otherskillslist', 'benefits',
+        ];
+        foreach ($listCandidates as $key) {
+            $val = $overrides[$key] ?? $formData[$key] ?? $aiData[$key] ?? null;
+            if (is_array($val) && !empty($val)) {
+                $arrays[$key] = $val;
+            }
+        }
+
+        return $arrays;
+    }
+
+    /**
+     * Classify template placeholders into rendering modes by inspecting patterns.
+     *
+     * - ROW groups: {{groupname.field}} where groupname is a known array of objects
+     * - BLOCK groups: {{#groupname}} / {{/groupname}} bracket pairs
+     * - Checkboxes: {{checkb.key.yes}} / {{checkb.key.no}}
+     * - Lists: placeholder whose resolved value is an array (flat list of strings)
+     * - Scalars: everything else
+     *
+     * @return array{rowGroups: array<string, list<string>>, blockGroups: list<string>, checkboxes: array<string, list<string>>, lists: list<string>, scalars: list<string>}
+     */
+    private function classifyTemplatePlaceholders(array $placeholders, array $variables, array $arrays): array
+    {
+        $rowGroups = [];
+        $blockGroupNames = [];
+        $checkboxes = [];
+        $lists = [];
+        $scalars = [];
+
+        $arrayObjectKeys = [];
+        foreach ($arrays as $name => $data) {
+            if (!empty($data) && is_array($data[0] ?? null)) {
+                $arrayObjectKeys[$name] = true;
+            }
+        }
+
+        foreach ($placeholders as $ph) {
+            if (str_starts_with($ph, '#') || str_starts_with($ph, '/')) {
+                $blockGroupNames[trim($ph, '#/')] = true;
+                continue;
+            }
+
+            if (str_starts_with($ph, 'checkb.')) {
+                $parts = explode('.', $ph);
+                $cbKey = $parts[1] ?? '';
+                if ($cbKey !== '') {
+                    $checkboxes[$cbKey][] = $ph;
+                }
+                continue;
+            }
+
+            if (str_contains($ph, '.')) {
+                $prefix = explode('.', $ph)[0];
+                if (isset($arrayObjectKeys[$prefix])) {
+                    $rowGroups[$prefix][] = $ph;
+                    continue;
+                }
+            }
+
+            $val = $variables[$ph] ?? null;
+            if (is_array($val) || isset($arrays[$ph])) {
+                $lists[] = $ph;
+                continue;
+            }
+
+            $scalars[] = $ph;
+        }
+
+        return [
+            'rowGroups' => $rowGroups,
+            'blockGroups' => array_keys($blockGroupNames),
+            'checkboxes' => $checkboxes,
+            'lists' => $lists,
+            'scalars' => $scalars,
+        ];
+    }
+
+    /**
+     * ROW mode: clone table rows for repeating groups like stations.
+     * Template has {{stations.employer}}, {{stations.time}}, etc. in a table row.
+     * PhpWord cloneRow duplicates the row, suffixing #1, #2, etc.
+     */
+    private function processRowGroups(TemplateProcessor $tp, array $rowGroups, array $arrays): void
+    {
+        foreach ($rowGroups as $groupName => $fields) {
+            $data = $arrays[$groupName] ?? [];
+            $count = count($data);
+            if ($count === 0) {
+                foreach ($fields as $field) {
+                    $tp->setValue($field, '');
+                }
+                continue;
+            }
+
+            $anchorField = $fields[0] ?? null;
+            if ($anchorField === null) {
+                continue;
+            }
+
+            try {
+                $tp->cloneRow($anchorField, $count);
+            } catch (\Throwable $e) {
+                $this->logger->warning('cloneRow failed, falling back to setValue', [
+                    'group' => $groupName,
+                    'anchor' => $anchorField,
+                    'error' => $e->getMessage(),
+                ]);
+                foreach ($fields as $field) {
+                    $tp->setValue($field, '');
+                }
+                continue;
+            }
+
+            $uniqueFieldSuffixes = [];
+            foreach ($fields as $field) {
+                $suffix = substr($field, strlen($groupName) + 1);
+                $uniqueFieldSuffixes[$suffix] = true;
+            }
+
+            for ($i = 0; $i < $count; $i++) {
+                $num = $i + 1;
+                $row = $data[$i] ?? [];
+                foreach (array_keys($uniqueFieldSuffixes) as $suffix) {
+                    $cleanSuffix = str_replace('.N', '', $suffix);
+                    $value = $row[$cleanSuffix] ?? '';
+                    if (str_contains($value, "\n")) {
+                        $value = str_replace("\n", '</w:t><w:br/><w:t>', $value);
+                    }
+                    $phName = "{$groupName}.{$suffix}";
+                    $tp->setValue($phName . '#' . $num, $value);
+                }
+            }
+        }
+    }
+
+    /**
+     * BLOCK mode: clone everything between {{#name}} and {{/name}} markers.
+     * Fills inner placeholders per iteration.
+     */
+    private function processBlockGroups(TemplateProcessor $tp, array $blockGroupNames, array $arrays): void
+    {
+        foreach ($blockGroupNames as $groupName) {
+            $data = $arrays[$groupName] ?? [];
+            $count = count($data);
+            if ($count === 0) {
+                try {
+                    $tp->cloneBlock($groupName, 0, true, true);
+                } catch (\Throwable) {
+                }
+                continue;
+            }
+
+            try {
+                $tp->cloneBlock($groupName, $count, true, true);
+            } catch (\Throwable $e) {
+                $this->logger->warning('cloneBlock failed', [
+                    'group' => $groupName,
+                    'error' => $e->getMessage(),
+                ]);
+                continue;
+            }
+
+            for ($i = 0; $i < $count; $i++) {
+                $num = $i + 1;
+                $row = is_array($data[$i]) ? $data[$i] : ['value' => (string) $data[$i]];
+                foreach ($row as $field => $value) {
+                    $value = (string) ($value ?? '');
+                    if (str_contains($value, "\n")) {
+                        $value = str_replace("\n", '</w:t><w:br/><w:t>', $value);
+                    }
+                    $tp->setValue("{$groupName}.{$field}#{$num}", $value);
+                }
+            }
+        }
+    }
+
+    /**
+     * Checkbox mode: detect all checkb.KEY.yes / checkb.KEY.no pairs.
+     * Checks or unchecks Word checkbox content controls.
+     */
+    private function processCheckboxes(TemplateProcessor $tp, array $checkboxes, array $variables): void
+    {
+        foreach ($checkboxes as $cbKey => $fields) {
+            $yesVal = (bool) ($variables["checkb.{$cbKey}.yes"] ?? false);
+            foreach ($fields as $ph) {
+                $isYes = str_ends_with($ph, '.yes');
+                try {
+                    $tp->setCheckbox($ph, $isYes ? $yesVal : !$yesVal);
+                } catch (\Throwable) {
+                    $tp->setValue($ph, ($isYes ? $yesVal : !$yesVal) ? '☑' : '☐');
+                }
+            }
+        }
+    }
+
+    /**
+     * LIST mode: array values rendered as newline-separated text with OOXML line breaks.
+     */
+    private function processLists(TemplateProcessor $tp, array $listKeys, array $variables): void
+    {
+        foreach ($listKeys as $key) {
+            $val = $variables[$key] ?? null;
+            $text = is_array($val) ? implode("\n", array_map('strval', $val)) : (string) ($val ?? '');
+            $text = str_replace("\n", '</w:t><w:br/><w:t>', $text);
+            $tp->setValue($key, $text);
+        }
+    }
+
+    /**
+     * Scalar mode: simple text replacement for all remaining placeholders.
+     */
+    private function processScalars(TemplateProcessor $tp, array $scalarKeys, array $variables): void
+    {
+        foreach ($scalarKeys as $key) {
+            $value = $variables[$key] ?? null;
+            $tp->setValue($key, (string) ($value ?? ''));
+        }
     }
 
     private function cleanTemplateMacros(string $docxPath): string

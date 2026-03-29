@@ -369,7 +369,7 @@ test.describe('TemplateX UI Tests', () => {
     await page.waitForSelector('text=TemplateX', { timeout: 15_000 })
 
     const navBar = page.locator('nav')
-    for (const tab of ['dashboard', 'entries', 'templates', 'forms', 'settings']) {
+    for (const tab of ['overview', 'records', 'questionnaires', 'documents', 'settings']) {
       await expect(navBar.locator(`button[data-nav="${tab}"]`)).toBeVisible()
     }
   })
@@ -379,16 +379,16 @@ test.describe('TemplateX UI Tests', () => {
     await page.waitForSelector('text=TemplateX', { timeout: 15_000 })
     await page.waitForTimeout(2000)
 
-    const formsCount = page.locator('button[data-nav="forms"] >> .. >> .text-3xl, button[data-nav="forms"]').first()
+    const formsCount = page.locator('button[data-nav="questionnaires"]').first()
     await expect(formsCount).toBeVisible()
   })
 
   test('entries tab shows candidates', async ({ page }) => {
-    await page.goto(`${BASE_URL}/plugins/templatex#tx-entries`)
+    await page.goto(`${BASE_URL}/plugins/templatex#tx-records`)
     await page.waitForSelector('text=TemplateX', { timeout: 15_000 })
     await page.waitForTimeout(2000)
 
-    await page.click('button[data-nav="entries"]')
+    await page.click('button[data-nav="records"]')
     await page.waitForTimeout(1000)
 
     const entryList = page.locator('[data-select-entry]')
@@ -397,11 +397,11 @@ test.describe('TemplateX UI Tests', () => {
   })
 
   test('templates tab shows uploaded templates', async ({ page }) => {
-    await page.goto(`${BASE_URL}/plugins/templatex#tx-templates`)
+    await page.goto(`${BASE_URL}/plugins/templatex#tx-documents`)
     await page.waitForSelector('text=TemplateX', { timeout: 15_000 })
     await page.waitForTimeout(2000)
 
-    await page.click('button[data-nav="templates"]')
+    await page.click('button[data-nav="documents"]')
     await page.waitForTimeout(1000)
 
     const templateList = page.locator('[data-select-template]')
@@ -410,11 +410,11 @@ test.describe('TemplateX UI Tests', () => {
   })
 
   test('forms tab shows default form with fields', async ({ page }) => {
-    await page.goto(`${BASE_URL}/plugins/templatex#tx-forms`)
+    await page.goto(`${BASE_URL}/plugins/templatex#tx-questionnaires`)
     await page.waitForSelector('text=TemplateX', { timeout: 15_000 })
     await page.waitForTimeout(2000)
 
-    await page.click('button[data-nav="forms"]')
+    await page.click('button[data-nav="questionnaires"]')
     await page.waitForTimeout(1000)
 
     await expect(page.locator('text=Standard Kandidatenprofil')).toBeVisible()
@@ -432,7 +432,7 @@ test.describe('TemplateX UI Tests', () => {
     await page.waitForSelector('text=TemplateX', { timeout: 15_000 })
     await page.waitForTimeout(2000)
 
-    await page.click('button[data-nav="settings"]')
+    await page.click('[data-nav="settings"]')
     await page.waitForTimeout(1000)
 
     const companyInput = page.locator('input[name="company_name"]')
@@ -443,11 +443,11 @@ test.describe('TemplateX UI Tests', () => {
   })
 
   test('entry detail shows extraction data and files', async ({ page }) => {
-    await page.goto(`${BASE_URL}/plugins/templatex#tx-entries`)
+    await page.goto(`${BASE_URL}/plugins/templatex#tx-records`)
     await page.waitForSelector('text=TemplateX', { timeout: 15_000 })
     await page.waitForTimeout(2000)
 
-    await page.click('button[data-nav="entries"]')
+    await page.click('button[data-nav="records"]')
     await page.waitForTimeout(1000)
 
     const firstEntry = page.locator('[data-select-entry]').first()
@@ -455,8 +455,8 @@ test.describe('TemplateX UI Tests', () => {
       await firstEntry.click()
       await page.waitForTimeout(2000)
 
-      await expect(page.locator('text=FORM DATA').or(page.locator('text=Form Data').or(page.locator('text=Formulardaten')))).toBeVisible({ timeout: 5000 }).catch(() => {})
-      await expect(page.locator('text=FILES').or(page.locator('text=Files').or(page.locator('text=Dateien')))).toBeVisible({ timeout: 5000 }).catch(() => {})
+      await expect(page.locator('text=Questionnaire').or(page.locator('text=Fragebogen'))).toBeVisible({ timeout: 5000 }).catch(() => {})
+      await expect(page.locator('text=Source Documents').or(page.locator('text=Quelldokumente'))).toBeVisible({ timeout: 5000 }).catch(() => {})
     }
   })
 })
