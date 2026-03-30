@@ -149,11 +149,11 @@ export default {
     }
 
     function entryDisplayName(entry) {
-      if (entry.name) return entry.name
       const d = entry.field_values || {}
-      return d.name || d.fullname || d.full_name
-        || (d.first_name ? `${d.first_name} ${d.last_name || ''}`.trim() : null)
-        || `#${entry.id}`
+      const fromFields = (d.firstname || d.lastname)
+        ? `${d.firstname || ''} ${d.lastname || ''}`.trim()
+        : null
+      return fromFields || entry.name || d.fullname || `#${entry.id}`
     }
 
     function formNameById(formId) {
@@ -1628,9 +1628,12 @@ export default {
             else fieldValues[field.key] = input.value
           }
           try {
+            const computedName = (fieldValues.firstname || fieldValues.lastname)
+              ? `${fieldValues.firstname || ''} ${fieldValues.lastname || ''}`.trim()
+              : state.selectedEntry.name
             await api(`/candidates/${state.selectedEntry.id}`, {
               method: 'PUT',
-              body: JSON.stringify({ field_values: fieldValues, name: fieldValues['target-position'] || fieldValues['fullname'] || state.selectedEntry.name }),
+              body: JSON.stringify({ field_values: fieldValues, name: computedName }),
             })
             showToast(T('app.saved'))
             const d = await api(`/candidates/${state.selectedEntry.id}`)

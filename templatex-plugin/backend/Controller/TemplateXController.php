@@ -1392,6 +1392,8 @@ class TemplateXController extends AbstractController
             'language' => 'de',
             'version' => 1,
             'fields' => [
+                ['key' => 'firstname', 'label' => 'Vorname', 'type' => 'text', 'required' => true, 'source' => 'form'],
+                ['key' => 'lastname', 'label' => 'Nachname', 'type' => 'text', 'required' => true, 'source' => 'form'],
                 ['key' => 'target-position', 'label' => 'Vorgestellte Position', 'type' => 'text', 'required' => true, 'source' => 'form'],
                 ['key' => 'nationality', 'label' => 'Nationalität', 'type' => 'text', 'required' => false, 'source' => 'form'],
                 ['key' => 'maritalstatus', 'label' => 'Familienstand', 'type' => 'select', 'options' => ['ledig', 'verheiratet', 'geschieden', 'verwitwet'], 'required' => false, 'source' => 'form'],
@@ -1421,7 +1423,9 @@ class TemplateXController extends AbstractController
             You are extracting structured data from a CV/resume document. Return a JSON object with these fields. Use null for any field not found in the document. Do NOT invent or guess data.
 
             Fields to extract:
-            - fullname (string): Full name
+            - firstname (string): First name / given name
+            - lastname (string): Last name / family name / surname
+            - fullname (string): Full name (firstname + lastname combined)
             - address1 (string): Street and house number
             - address2 (string): City
             - zip (string): Postal code
@@ -1474,6 +1478,8 @@ class TemplateXController extends AbstractController
     private function getVariableSources(): array
     {
         return [
+            'firstname' => ['primary' => 'form', 'fallback' => 'ai'],
+            'lastname' => ['primary' => 'form', 'fallback' => 'ai'],
             'fullname' => ['primary' => 'ai', 'fallback' => 'form'],
             'address1' => ['primary' => 'ai'],
             'address2' => ['primary' => 'ai'],
