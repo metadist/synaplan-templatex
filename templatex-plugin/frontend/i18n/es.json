@@ -175,7 +175,22 @@
     "confirm_delete": "¿Eliminar este cuestionario y todos sus campos?",
     "default_form": "Predeterminado",
     "field_options_hint": "Opciones (separadas por comas, p.ej.: casado, soltero, divorciado)",
-    "list_placeholder": "Un elemento por línea"
+    "list_placeholder": "Un elemento por línea",
+    "form_name": "Nombre del cuestionario",
+    "import_title": "Importar desde texto",
+    "import_hint": "Pegue su tabla de definición de variables aquí (p.ej. de Confluence, Word o una hoja de cálculo)...",
+    "import_paste_label": "Pegar definiciones de variables",
+    "import_upload_label": "O subir un archivo .docx:",
+    "import_parse": "Analizar con IA",
+    "import_parsing": "Analizando...",
+    "import_preview": "Vista previa",
+    "import_create": "Crear cuestionario",
+    "import_fields_found": "campos encontrados",
+    "import_error": "No se pudieron analizar campos.",
+    "import_error_empty": "Primero pegue texto o suba un archivo.",
+    "import_source": "Fuente / Respaldo",
+    "import_col_hint": "Nota",
+    "import_default_name": "Cuestionario importado"
   },
   "settings": {
     "title": "Ajustes",

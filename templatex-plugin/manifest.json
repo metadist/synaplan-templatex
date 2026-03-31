@@ -20,6 +20,7 @@
     {"path": "/forms/{formId}", "method": "GET", "description": "Get form definition"},
     {"path": "/forms/{formId}", "method": "PUT", "description": "Update form definition"},
     {"path": "/forms/{formId}", "method": "DELETE", "description": "Delete form definition"},
+    {"path": "/forms/import-parse", "method": "POST", "description": "Parse pasted text or DOCX into form fields using AI"},
     {"path": "/candidates", "method": "GET", "description": "List candidates"},
     {"path": "/candidates", "method": "POST", "description": "Create candidate"},
     {"path": "/candidates/{candidateId}", "method": "GET", "description": "Get candidate detail"},

@@ -175,7 +175,22 @@
     "confirm_delete": "Bu anket ve tüm alanları silinsin mi?",
     "default_form": "Varsayılan",
     "field_options_hint": "Seçenekler (virgülle ayrılmış, örn.: evli, bekar, boşanmış)",
-    "list_placeholder": "Satır başına bir giriş"
+    "list_placeholder": "Satır başına bir giriş",
+    "form_name": "Anket Adı",
+    "import_title": "Metinden İçe Aktar",
+    "import_hint": "Değişken tanım tablonuzu buraya yapıştırın (örn. Confluence, Word veya bir tablodan)...",
+    "import_paste_label": "Değişken tanımlarını yapıştır",
+    "import_upload_label": "Veya bir .docx dosyası yükleyin:",
+    "import_parse": "Yapay Zeka ile Analiz Et",
+    "import_parsing": "Analiz ediliyor...",
+    "import_preview": "Önizleme",
+    "import_create": "Anket Oluştur",
+    "import_fields_found": "alan bulundu",
+    "import_error": "Hiçbir alan ayrıştırılamadı.",
+    "import_error_empty": "Lütfen önce metin yapıştırın veya bir dosya yükleyin.",
+    "import_source": "Kaynak / Yedek",
+    "import_col_hint": "İpucu",
+    "import_default_name": "İçe Aktarılan Anket"
   },
   "settings": {
     "title": "Ayarlar",

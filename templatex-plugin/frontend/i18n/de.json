@@ -175,7 +175,22 @@
     "confirm_delete": "Diesen Fragebogen und alle Felder wirklich löschen?",
     "default_form": "Standard",
     "field_options_hint": "Optionen (kommagetrennt, z.B.: verheiratet, ledig, geschieden)",
-    "list_placeholder": "Ein Eintrag pro Zeile"
+    "list_placeholder": "Ein Eintrag pro Zeile",
+    "form_name": "Fragebogenname",
+    "import_title": "Aus Text importieren",
+    "import_hint": "Variablen-Definitionstabelle hier einfügen (z.B. aus Confluence, Word oder einer Tabelle)...",
+    "import_paste_label": "Variablen-Definitionen einfügen",
+    "import_upload_label": "Oder eine .docx-Datei hochladen:",
+    "import_parse": "Mit KI analysieren",
+    "import_parsing": "Wird analysiert...",
+    "import_preview": "Vorschau",
+    "import_create": "Fragebogen erstellen",
+    "import_fields_found": "Felder erkannt",
+    "import_error": "Es konnten keine Felder erkannt werden.",
+    "import_error_empty": "Bitte zuerst Text einfügen oder eine Datei hochladen.",
+    "import_source": "Quelle / Fallback",
+    "import_col_hint": "Hinweis",
+    "import_default_name": "Importierter Fragebogen"
   },
   "settings": {
     "title": "Einstellungen",

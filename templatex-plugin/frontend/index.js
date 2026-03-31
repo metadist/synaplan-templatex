@@ -1,4 +1,4 @@
-const TX_VERSION = 'v0.2.1'
+const TX_VERSION = 'v0.2.2'
 
 export default {
   mount(el, context) {
@@ -41,6 +41,11 @@ export default {
       parsing: false,
       editingVarKey: null,
       selectedGenerateTemplate: null,
+      showImport: false,
+      importParsing: false,
+      importParsedFields: null,
+      importFormName: '',
+      importError: null,
     }
 
     // =========================================================================
@@ -90,15 +95,40 @@ export default {
     }
 
     // =========================================================================
-    // API helpers
+    // API helpers — with automatic token refresh on 401
     // =========================================================================
 
+    let _refreshPromise = null
+
+    async function refreshAccessToken() {
+      if (_refreshPromise) return _refreshPromise
+      _refreshPromise = (async () => {
+        try {
+          const res = await fetch(`${apiBaseUrl}/api/v1/auth/refresh`, {
+            method: 'POST',
+            credentials: 'include',
+          })
+          return res.ok
+        } catch {
+          return false
+        } finally {
+          _refreshPromise = null
+        }
+      })()
+      return _refreshPromise
+    }
+
     async function api(path, opts = {}) {
-      const res = await fetch(`${BASE}${path}`, {
+      const doFetch = () => fetch(`${BASE}${path}`, {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json', ...opts.headers },
         ...opts,
       })
+      let res = await doFetch()
+      if (res.status === 401) {
+        const refreshed = await refreshAccessToken()
+        if (refreshed) res = await doFetch()
+      }
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error || `HTTP ${res.status}`)
@@ -107,10 +137,17 @@ export default {
     }
 
     async function apiUpload(path, file, extraFields = {}) {
-      const fd = new FormData()
-      fd.append('file', file)
-      for (const [k, v] of Object.entries(extraFields)) fd.append(k, v)
-      const res = await fetch(`${BASE}${path}`, { method: 'POST', credentials: 'include', body: fd })
+      const doFetch = () => {
+        const fd = new FormData()
+        fd.append('file', file)
+        for (const [k, v] of Object.entries(extraFields)) fd.append(k, v)
+        return fetch(`${BASE}${path}`, { method: 'POST', credentials: 'include', body: fd })
+      }
+      let res = await doFetch()
+      if (res.status === 401) {
+        const refreshed = await refreshAccessToken()
+        if (refreshed) res = await doFetch()
+      }
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error || `HTTP ${res.status}`)
@@ -532,6 +569,7 @@ export default {
     // =========================================================================
 
     function renderQuestionnaires() {
+      if (state.showImport) return renderFormImport()
       if (state.selectedForm) return renderFormDetail()
       if (state.showNewForm || state.editingForm) return renderFormEditor()
 
@@ -557,9 +595,87 @@ export default {
       return `<div class="mt-4 space-y-4">
         <div class="flex items-center justify-between">
           <h3 class="text-lg font-medium">${T('questionnaires.title')}</h3>
-          <button data-action="new-form" class="tx-btn tx-btn-sm">${ICONS.plus} ${T('questionnaires.new')}</button>
+          <div class="flex items-center gap-2">
+            <button data-action="show-import" class="tx-btn tx-btn-sm tx-btn-ghost">${ICONS.upload} ${T('questionnaires.import_title')}</button>
+            <button data-action="new-form" class="tx-btn tx-btn-sm">${ICONS.plus} ${T('questionnaires.new')}</button>
+          </div>
         </div>
         <div class="space-y-2">${rows}</div>
+      </div>`
+    }
+
+    function renderFormImport() {
+      const parsed = state.importParsedFields
+      const hasPreview = parsed && parsed.length > 0
+
+      const inputSection = `
+        <div class="tx-card p-6 space-y-4">
+          <h4 class="text-sm font-medium">${T('questionnaires.import_paste_label')}</h4>
+          <textarea id="tx-import-text" class="tx-input" rows="10" placeholder="${T('questionnaires.import_hint')}" style="font-family:monospace;font-size:.8rem">${escHtml(state._importText || '')}</textarea>
+          <div class="flex items-center gap-3">
+            <span class="text-xs tx-secondary">${T('questionnaires.import_upload_label')}</span>
+            <input type="file" id="tx-import-file" accept=".docx" class="text-sm" />
+          </div>
+          <div class="flex items-center gap-2">
+            <button data-action="import-parse" class="tx-btn tx-btn-sm" ${state.importParsing ? 'disabled' : ''}>
+              ${state.importParsing ? '<span class="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>' : ICONS.sparkle}
+              ${state.importParsing ? T('questionnaires.import_parsing') : T('questionnaires.import_parse')}
+            </button>
+            ${state.importError ? `<span class="text-sm" style="color:var(--status-error)">${escHtml(state.importError)}</span>` : ''}
+          </div>
+        </div>`
+
+      let previewSection = ''
+      if (hasPreview) {
+        const previewRows = parsed.map((f, i) => `
+          <tr class="tx-divider border-t">
+            <td class="py-2 px-3 font-mono text-xs">${escHtml(f.key)}</td>
+            <td class="py-2 px-3 text-sm">${escHtml(f.label)}</td>
+            <td class="py-2 px-3 text-xs">${escHtml(f.type)}</td>
+            <td class="py-2 px-3 text-xs">${escHtml(f.source || 'form')}${f.fallback ? ` / ${escHtml(f.fallback)}` : ''}</td>
+            <td class="py-2 px-3 text-center">${f.required ? '<span class="text-green-600">&#10003;</span>' : '<span class="text-gray-400">&#10007;</span>'}</td>
+            <td class="py-2 px-3 text-xs tx-secondary">${escHtml(f.hint || '')}</td>
+            <td class="py-2 px-3">
+              <button data-action="import-remove-field" data-idx="${i}" class="p-1 text-gray-400 hover:text-red-500 rounded transition-colors" title="${T('app.delete')}">${ICONS.trash}</button>
+            </td>
+          </tr>`).join('')
+
+        previewSection = `
+          <div class="tx-card p-6 space-y-4">
+            <div class="flex items-center justify-between">
+              <h4 class="text-sm font-medium">${T('questionnaires.import_preview')} (${parsed.length} ${T('questionnaires.import_fields_found')})</h4>
+            </div>
+            <div class="space-y-3">
+              <div>
+                <label class="tx-label">${T('questionnaires.form_name')}</label>
+                <input id="tx-import-form-name" class="tx-input" value="${escHtml(state.importFormName || '')}" placeholder="${T('questionnaires.form_name')}" />
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left">
+                <thead>
+                  <tr class="tx-divider border-b text-xs tx-secondary uppercase tracking-wider">
+                    <th class="py-2 px-3">${T('questionnaires.field_key')}</th>
+                    <th class="py-2 px-3">${T('questionnaires.field_label')}</th>
+                    <th class="py-2 px-3">${T('questionnaires.field_type')}</th>
+                    <th class="py-2 px-3">${T('questionnaires.import_source')}</th>
+                    <th class="py-2 px-3 text-center">${T('questionnaires.field_required')}</th>
+                    <th class="py-2 px-3">${T('questionnaires.import_col_hint')}</th>
+                    <th class="py-2 px-3"></th>
+                  </tr>
+                </thead>
+                <tbody>${previewRows}</tbody>
+              </table>
+            </div>
+            <button data-action="import-create" class="tx-btn">${ICONS.check} ${T('questionnaires.import_create')}</button>
+          </div>`
+      }
+
+      return `<div class="mt-4 space-y-4">
+        <button data-action="back-questionnaires" class="flex items-center gap-1 text-sm transition-colors" style="color:var(--txt-secondary)">${ICONS.back} ${T('app.back')}</button>
+        <h3 class="text-lg font-medium">${T('questionnaires.import_title')}</h3>
+        ${inputSection}
+        ${previewSection}
       </div>`
     }
 
@@ -1401,6 +1517,95 @@ export default {
       el.querySelector('[data-action="new-form"]')
         ?.addEventListener('click', () => { state.showNewForm = true; state.editingForm = null; render() })
 
+      // --- Form: import ---
+      el.querySelector('[data-action="show-import"]')
+        ?.addEventListener('click', () => {
+          state.showImport = true
+          state.importParsedFields = null
+          state.importFormName = ''
+          state.importError = null
+          state._importText = ''
+          render()
+        })
+
+      el.querySelector('[data-action="import-parse"]')
+        ?.addEventListener('click', async () => {
+          const textarea = el.querySelector('#tx-import-text')
+          const fileInput = el.querySelector('#tx-import-file')
+          const file = fileInput?.files?.[0]
+          const text = textarea?.value?.trim()
+
+          if (!text && !file) {
+            state.importError = T('questionnaires.import_error_empty')
+            render()
+            return
+          }
+
+          state.importParsing = true
+          state.importError = null
+          state._importText = textarea?.value || ''
+          render()
+
+          await refreshAccessToken()
+
+          try {
+            let result
+            if (file) {
+              result = await apiUpload('/forms/import-parse', file)
+            } else {
+              result = await api('/forms/import-parse', {
+                method: 'POST',
+                body: JSON.stringify({ text }),
+              })
+            }
+            state.importParsedFields = result.fields || []
+            state.importFormName = state.importFormName || T('questionnaires.import_default_name')
+          } catch (err) {
+            state.importError = err.message
+          }
+          state.importParsing = false
+          render()
+        })
+
+      el.querySelectorAll('[data-action="import-remove-field"]').forEach(btn =>
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.dataset.idx)
+          if (state.importParsedFields) {
+            state.importParsedFields.splice(idx, 1)
+            render()
+          }
+        })
+      )
+
+      el.querySelector('[data-action="import-create"]')
+        ?.addEventListener('click', async () => {
+          const nameInput = el.querySelector('#tx-import-form-name')
+          const name = nameInput?.value?.trim() || state.importFormName || T('questionnaires.import_default_name')
+          const fields = state.importParsedFields || []
+
+          if (fields.length === 0) {
+            showToast(T('questionnaires.import_error'), 'error')
+            return
+          }
+
+          try {
+            await api('/forms', {
+              method: 'POST',
+              body: JSON.stringify({ name, language: 'de', fields }),
+            })
+            showToast(T('app.saved'))
+            state.showImport = false
+            state.importParsedFields = null
+            state.importFormName = ''
+            state.importError = null
+            state._importText = ''
+            await fetchForms()
+            render()
+          } catch (err) {
+            showToast(err.message, 'error')
+          }
+        })
+
       // --- Form: edit ---
       el.querySelector('[data-action="edit-form"]')
         ?.addEventListener('click', () => {
@@ -1744,8 +1949,13 @@ export default {
       el.querySelector('[data-action="back-documents"]')
         ?.addEventListener('click', () => { state.selectedTemplate = null; render() })
 
-      el.querySelector('[data-action="back-questionnaires"]')
-        ?.addEventListener('click', () => { state.selectedForm = null; state.showNewForm = false; state.editingForm = null; render() })
+      el.querySelectorAll('[data-action="back-questionnaires"]').forEach(btn =>
+        btn.addEventListener('click', () => {
+          state.selectedForm = null; state.showNewForm = false; state.editingForm = null
+          state.showImport = false; state.importParsedFields = null; state.importError = null
+          render()
+        })
+      )
 
       el.querySelector('[data-action="back-profiles"]')
         ?.addEventListener('click', () => {
@@ -1829,6 +2039,7 @@ export default {
     async function handleExtract(entryId) {
       state.extracting = true
       render()
+      await refreshAccessToken()
       try {
         await api(`/candidates/${entryId}/extract`, { method: 'POST' })
         const d = await api(`/candidates/${entryId}`)
@@ -1842,6 +2053,7 @@ export default {
     async function handleParseDocuments(entryId) {
       state.parsing = true
       render()
+      await refreshAccessToken()
       try {
         const d = await api(`/candidates/${entryId}/parse-documents`, { method: 'POST' })
         if (d.success && d.suggestions) {
@@ -1902,6 +2114,7 @@ export default {
     async function handleGenerate(entryId, templateId) {
       state.generating = true
       render()
+      await refreshAccessToken()
       try {
         await api(`/candidates/${entryId}/generate/${templateId}`, { method: 'POST' })
         const d = await api(`/candidates/${entryId}`)

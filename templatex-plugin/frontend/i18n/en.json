@@ -175,7 +175,22 @@
     "confirm_delete": "Delete this questionnaire and all its fields?",
     "default_form": "Default",
     "field_options_hint": "Options (comma-separated, e.g.: married, single, divorced)",
-    "list_placeholder": "One item per line"
+    "list_placeholder": "One item per line",
+    "form_name": "Questionnaire Name",
+    "import_title": "Import from Text",
+    "import_hint": "Paste your variable definition table here (e.g. from Confluence, Word, or a spreadsheet)...",
+    "import_paste_label": "Paste variable definitions",
+    "import_upload_label": "Or upload a .docx file:",
+    "import_parse": "Parse with AI",
+    "import_parsing": "Parsing...",
+    "import_preview": "Preview",
+    "import_create": "Create Questionnaire",
+    "import_fields_found": "fields found",
+    "import_error": "No fields could be parsed.",
+    "import_error_empty": "Please paste text or upload a file first.",
+    "import_source": "Source / Fallback",
+    "import_col_hint": "Hint",
+    "import_default_name": "Imported Questionnaire"
   },
   "settings": {
     "title": "Settings",

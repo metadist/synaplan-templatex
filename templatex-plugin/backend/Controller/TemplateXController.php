@@ -12,6 +12,7 @@ use App\Service\File\FileProcessor;
 use App\Service\PluginDataService;
 use App\Service\ModelConfigService;
 use App\Service\RateLimitService;
+use PhpOffice\PhpWord\IOFactory as PhpWordIOFactory;
 use PhpOffice\PhpWord\TemplateProcessor;
 use OpenApi\Attributes as OA;
 use Psr\Log\LoggerInterface;
@@ -35,6 +36,36 @@ class TemplateXController extends AbstractController
     private const DATA_TYPE_CANDIDATE = 'templatex_candidate';
     private const DATA_TYPE_TEMPLATE = 'templatex_template';
     private const DATA_TYPE_VALIDATION = 'templatex_validation';
+
+    private const DEFAULT_VARIABLE_SOURCES = [
+        'firstname' => ['primary' => 'form', 'fallback' => 'ai'],
+        'lastname' => ['primary' => 'form', 'fallback' => 'ai'],
+        'fullname' => ['primary' => 'ai', 'fallback' => 'form'],
+        'address1' => ['primary' => 'ai'],
+        'address2' => ['primary' => 'ai'],
+        'zip' => ['primary' => 'ai'],
+        'birthdate' => ['primary' => 'ai', 'fallback' => 'form'],
+        'nationality' => ['primary' => 'form'],
+        'maritalstatus' => ['primary' => 'form'],
+        'number' => ['primary' => 'ai', 'fallback' => 'form'],
+        'email' => ['primary' => 'ai', 'fallback' => 'form'],
+        'target-position' => ['primary' => 'form'],
+        'currentposition' => ['primary' => 'ai', 'fallback' => 'form'],
+        'relevantposlist' => ['primary' => 'form'],
+        'relevantfortargetposlist' => ['primary' => 'form', 'fallback' => 'ai'],
+        'education' => ['primary' => 'ai', 'fallback' => 'form'],
+        'moving' => ['primary' => 'form'],
+        'travelorcommute' => ['primary' => 'form'],
+        'commute' => ['primary' => 'form'],
+        'travel' => ['primary' => 'form'],
+        'noticeperiod' => ['primary' => 'form'],
+        'currentansalary' => ['primary' => 'form'],
+        'expectedansalary' => ['primary' => 'form'],
+        'workinghours' => ['primary' => 'form'],
+        'benefits' => ['primary' => 'form'],
+        'languageslist' => ['primary' => 'form', 'fallback' => 'ai'],
+        'otherskillslist' => ['primary' => 'form', 'fallback' => 'ai'],
+    ];
 
     public function __construct(
         private PluginDataService $pluginData,
@@ -515,6 +546,89 @@ class TemplateXController extends AbstractController
         $this->pluginData->delete($userId, self::PLUGIN_NAME, self::DATA_TYPE_FORM, $formId);
 
         return $this->json(['success' => true, 'message' => 'Form deleted']);
+    }
+
+    #[Route('/forms/import-parse', name: 'forms_import_parse', methods: ['POST'], priority: 10)]
+    #[OA\Post(
+        path: '/api/v1/user/{userId}/plugins/templatex/forms/import-parse',
+        summary: 'Parse pasted text or DOCX into structured form fields using AI',
+        security: [['ApiKey' => []]],
+        tags: ['TemplateX Plugin']
+    )]
+    #[OA\Response(response: 200, description: 'Parsed form fields')]
+    public function formsImportParse(int $userId, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$this->canAccessPlugin($user, $userId)) {
+            return $this->json(['success' => false, 'error' => 'Unauthorized'], Response::HTTP_UNAUTHORIZED);
+        }
+
+        $text = null;
+
+        $file = $request->files->get('file');
+        if ($file) {
+            $ext = strtolower($file->getClientOriginalExtension());
+            if ($ext !== 'docx') {
+                return $this->json(['success' => false, 'error' => 'Only .docx files are supported'], Response::HTTP_BAD_REQUEST);
+            }
+            $text = $this->extractTextFromDocx($file->getPathname());
+            if ($text === null) {
+                return $this->json(['success' => false, 'error' => 'Could not extract text from DOCX'], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+        } else {
+            $body = json_decode($request->getContent(), true);
+            $text = $body['text'] ?? null;
+        }
+
+        if (!$text || trim($text) === '') {
+            return $this->json(['success' => false, 'error' => 'No text provided. Paste variable definitions or upload a .docx file.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $prompt = $this->buildImportParsePrompt($text);
+
+        try {
+            $messages = [
+                ['role' => 'system', 'content' => 'You are a precise document structure parser. Return only valid JSON arrays.'],
+                ['role' => 'user', 'content' => $prompt],
+            ];
+            $aiOptions = $this->resolveAiModelOptions($userId);
+            $result = $this->aiFacade->chat($messages, $userId, $aiOptions);
+            $content = $result['content'] ?? '';
+
+            $parsed = $this->parseJsonFromAiResponse($content);
+            if ($parsed === null || !is_array($parsed)) {
+                return $this->json(['success' => false, 'error' => 'AI returned unparseable response'], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+            $fields = isset($parsed[0]) ? $parsed : ($parsed['fields'] ?? []);
+
+            $validated = [];
+            foreach ($fields as $field) {
+                if (empty($field['key'])) {
+                    continue;
+                }
+                $validated[] = [
+                    'key' => $field['key'],
+                    'label' => $field['label'] ?? $field['key'],
+                    'type' => $this->normalizeFieldType($field['type'] ?? 'text'),
+                    'required' => (bool) ($field['required'] ?? false),
+                    'source' => $this->normalizeSource($field['source'] ?? 'form'),
+                    'fallback' => $this->normalizeSource($field['fallback'] ?? null),
+                    'hint' => $field['hint'] ?? null,
+                    'options' => $field['options'] ?? null,
+                ];
+            }
+
+            return $this->json([
+                'success' => true,
+                'fields' => $validated,
+                'field_count' => count($validated),
+                'model' => $result['model'] ?? 'unknown',
+            ]);
+        } catch (\Throwable $e) {
+            $this->logger->error('Import parse failed: ' . $e->getMessage());
+
+            return $this->json(['success' => false, 'error' => 'AI parsing failed: ' . $e->getMessage()], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 
     // =========================================================================
@@ -1003,13 +1117,15 @@ class TemplateXController extends AbstractController
             return $this->json(['success' => false, 'error' => 'Entry not found'], Response::HTTP_NOT_FOUND);
         }
 
-        $resolved = $this->resolveVariables($entry);
+        $form = $this->pluginData->get($userId, self::PLUGIN_NAME, self::DATA_TYPE_FORM, $entry['form_id'] ?? 'default');
+        $formFields = $form['fields'] ?? [];
+        $resolved = $this->resolveVariables($entry, $formFields);
 
         return $this->json([
             'success' => true,
             'variables' => $resolved['variables'],
             'station_count' => $resolved['station_count'],
-            'sources' => $this->getVariableSources(),
+            'sources' => $this->getVariableSources($formFields),
         ]);
     }
 
@@ -1037,7 +1153,9 @@ class TemplateXController extends AbstractController
         $entry['updated_at'] = date('c');
         $this->pluginData->set($userId, self::PLUGIN_NAME, self::DATA_TYPE_CANDIDATE, $candidateId, $entry);
 
-        $resolved = $this->resolveVariables($entry);
+        $form = $this->pluginData->get($userId, self::PLUGIN_NAME, self::DATA_TYPE_FORM, $entry['form_id'] ?? 'default');
+        $formFields = $form['fields'] ?? [];
+        $resolved = $this->resolveVariables($entry, $formFields);
 
         return $this->json([
             'success' => true,
@@ -1080,7 +1198,9 @@ class TemplateXController extends AbstractController
         }
 
         try {
-            $resolved = $this->resolveVariables($entry);
+            $form = $this->pluginData->get($userId, self::PLUGIN_NAME, self::DATA_TYPE_FORM, $entry['form_id'] ?? 'default');
+            $formFields = $form['fields'] ?? [];
+            $resolved = $this->resolveVariables($entry, $formFields);
             $variables = $resolved['variables'];
             $stationCount = $resolved['station_count'];
 
@@ -1474,47 +1594,167 @@ class TemplateXController extends AbstractController
         return null;
     }
 
-    /** @return array<string, array{primary: string, fallback?: string}> */
-    private function getVariableSources(): array
+    private function buildImportParsePrompt(string $text): string
     {
-        return [
-            'firstname' => ['primary' => 'form', 'fallback' => 'ai'],
-            'lastname' => ['primary' => 'form', 'fallback' => 'ai'],
-            'fullname' => ['primary' => 'ai', 'fallback' => 'form'],
-            'address1' => ['primary' => 'ai'],
-            'address2' => ['primary' => 'ai'],
-            'zip' => ['primary' => 'ai'],
-            'birthdate' => ['primary' => 'ai', 'fallback' => 'form'],
-            'nationality' => ['primary' => 'form'],
-            'maritalstatus' => ['primary' => 'form'],
-            'number' => ['primary' => 'ai', 'fallback' => 'form'],
-            'email' => ['primary' => 'ai', 'fallback' => 'form'],
-            'target-position' => ['primary' => 'form'],
-            'currentposition' => ['primary' => 'ai', 'fallback' => 'form'],
-            'relevantposlist' => ['primary' => 'form'],
-            'relevantfortargetposlist' => ['primary' => 'form', 'fallback' => 'ai'],
-            'education' => ['primary' => 'ai', 'fallback' => 'form'],
-            'moving' => ['primary' => 'form'],
-            'travelorcommute' => ['primary' => 'form'],
-            'commute' => ['primary' => 'form'],
-            'travel' => ['primary' => 'form'],
-            'noticeperiod' => ['primary' => 'form'],
-            'currentansalary' => ['primary' => 'form'],
-            'expectedansalary' => ['primary' => 'form'],
-            'workinghours' => ['primary' => 'form'],
-            'benefits' => ['primary' => 'form'],
-            'languageslist' => ['primary' => 'form', 'fallback' => 'ai'],
-            'otherskillslist' => ['primary' => 'form', 'fallback' => 'ai'],
-        ];
+        return <<<PROMPT
+        You are parsing a variable definition table for a document template system.
+        The input is pasted text (likely from a Confluence page or Word document) that describes template placeholders.
+
+        Each variable has a placeholder like {{key}} and a description of where the data comes from and what type it is.
+
+        Parse this into a JSON array of field objects. Each field object must have:
+        - "key" (string): the placeholder name WITHOUT curly braces, lowercase, using hyphens for compound names
+        - "label" (string): a human-readable German label for the field
+        - "type" (string): one of "text", "textarea", "select", "list", "date", "checkbox"
+        - "required" (boolean): true if the field seems mandatory
+        - "source" (string): "form" if data comes from a questionnaire/form, "ai" if extracted from CV/documents
+        - "fallback" (string|null): secondary source if primary is empty. "form" or "ai" or null
+        - "hint" (string|null): any special instructions (e.g. "leave empty if not relevant")
+        - "options" (array|null): for "select" type, the list of allowed values
+
+        Rules for determining type:
+        - If description says "als Liste verwaltet" or "Ein oder mehr Einträge" -> type "list"
+        - If the value is "Ja oder Nein" or "Ja/Nein" -> type "select" with options ["Ja", "Nein"]
+        - If it contains dates -> type "text" (we use text for dates)
+        - If it needs multi-line content (like career details) -> type "textarea"
+        - Default -> type "text"
+
+        Rules for determining source:
+        - "aus dem Lebenslauf extrahiert" or "muss aus dem Lebenslauf" -> source "ai"
+        - "kommt aus dem Formular" or "aus dem vorbereiteten Formular" -> source "form"
+        - "kommt aus dem Formular, Lebenslauf-Extraktion als Fallback" -> source "form", fallback "ai"
+        - "aus dem Lebenslauf, Formular als Fallback" or "wenn nicht, schaue in das Formular" -> source "ai", fallback "form"
+        - If both form and CV are mentioned, the first one mentioned is primary
+
+        IMPORTANT skip rules:
+        - SKIP any {{checkb.*}} placeholders (checkbox derivatives are auto-generated)
+        - SKIP any {{stations.*}} placeholders (career stations are handled separately by the system)
+        - If multiple related checkb/stations entries appear, ignore them all
+
+        Special handling:
+        - If description says "Weglassen wenn nicht relevant" or similar -> add hint "Leave empty if not relevant"
+        - For fields with "nicht relevant" logic -> add hint explaining the conditional
+
+        Return ONLY a valid JSON array of field objects. No explanation, no markdown.
+
+        Input text:
+        ---
+        {$text}
+        ---
+        PROMPT;
+    }
+
+    private function extractTextFromDocx(string $path): ?string
+    {
+        try {
+            $phpWord = PhpWordIOFactory::load($path);
+            $text = '';
+            foreach ($phpWord->getSections() as $section) {
+                foreach ($section->getElements() as $element) {
+                    $text .= $this->extractElementText($element) . "\n";
+                }
+            }
+
+            return trim($text) !== '' ? $text : null;
+        } catch (\Throwable $e) {
+            $this->logger->warning('DOCX text extraction failed: ' . $e->getMessage());
+
+            return null;
+        }
+    }
+
+    private function extractElementText(mixed $element): string
+    {
+        if (method_exists($element, 'getText')) {
+            $t = $element->getText();
+
+            return is_string($t) ? $t : '';
+        }
+
+        if (method_exists($element, 'getElements')) {
+            $parts = [];
+            foreach ($element->getElements() as $child) {
+                $parts[] = $this->extractElementText($child);
+            }
+
+            return implode(' ', array_filter($parts));
+        }
+
+        if (method_exists($element, 'getRows')) {
+            $rows = [];
+            foreach ($element->getRows() as $row) {
+                $cells = [];
+                foreach ($row->getCells() as $cell) {
+                    $cellParts = [];
+                    foreach ($cell->getElements() as $cellElement) {
+                        $cellParts[] = $this->extractElementText($cellElement);
+                    }
+                    $cells[] = implode(' ', array_filter($cellParts));
+                }
+                $rows[] = implode("\t", $cells);
+            }
+
+            return implode("\n", $rows);
+        }
+
+        return '';
+    }
+
+    private function normalizeFieldType(string $type): string
+    {
+        $valid = ['text', 'textarea', 'select', 'list', 'date', 'number', 'checkbox'];
+
+        return in_array($type, $valid, true) ? $type : 'text';
+    }
+
+    private function normalizeSource(?string $source): ?string
+    {
+        if ($source === null || $source === '') {
+            return null;
+        }
+        $valid = ['form', 'ai'];
+
+        return in_array($source, $valid, true) ? $source : 'form';
+    }
+
+    /**
+     * Build variable source map from form fields, falling back to hardcoded defaults.
+     *
+     * @param array $formFields The form's fields[] array, each with optional 'source' and 'fallback'
+     * @return array<string, array{primary: string, fallback?: string}>
+     */
+    private function getVariableSources(array $formFields = []): array
+    {
+        $sources = [];
+        foreach ($formFields as $field) {
+            $key = $field['key'] ?? null;
+            if ($key === null) {
+                continue;
+            }
+            $primary = $field['source'] ?? 'form';
+            $sources[$key] = ['primary' => $primary];
+            $fallback = $field['fallback'] ?? null;
+            if ($fallback !== null && $fallback !== '') {
+                $sources[$key]['fallback'] = $fallback;
+            }
+        }
+
+        foreach (self::DEFAULT_VARIABLE_SOURCES as $key => $config) {
+            if (!isset($sources[$key])) {
+                $sources[$key] = $config;
+            }
+        }
+
+        return $sources;
     }
 
     /** @return array{variables: array<string, mixed>, station_count: int} */
-    private function resolveVariables(array $entry): array
+    private function resolveVariables(array $entry, ?array $formFields = null): array
     {
         $formData = $entry['field_values'] ?? [];
         $aiData = $entry['ai_extracted'] ?? [];
         $overrides = $entry['variable_overrides'] ?? [];
-        $sources = $this->getVariableSources();
+        $sources = $this->getVariableSources($formFields ?? []);
 
         $variables = [];
 
