@@ -190,7 +190,10 @@
     "import_error_empty": "Please paste text or upload a file first.",
     "import_source": "Source / Fallback",
     "import_col_hint": "Hint",
-    "import_default_name": "Imported Questionnaire"
+    "import_default_name": "Imported Questionnaire",
+    "import_into": "Import Fields",
+    "import_into_btn": "Import Fields into Questionnaire",
+    "import_into_target": "Target questionnaire"
   },
   "settings": {
     "title": "Settings",

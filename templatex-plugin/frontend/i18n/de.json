@@ -190,7 +190,10 @@
     "import_error_empty": "Bitte zuerst Text einfügen oder eine Datei hochladen.",
     "import_source": "Quelle / Fallback",
     "import_col_hint": "Hinweis",
-    "import_default_name": "Importierter Fragebogen"
+    "import_default_name": "Importierter Fragebogen",
+    "import_into": "Felder importieren",
+    "import_into_btn": "Felder in Fragebogen importieren",
+    "import_into_target": "Ziel-Fragebogen"
   },
   "settings": {
     "title": "Einstellungen",

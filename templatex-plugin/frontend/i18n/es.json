@@ -190,7 +190,10 @@
     "import_error_empty": "Primero pegue texto o suba un archivo.",
     "import_source": "Fuente / Respaldo",
     "import_col_hint": "Nota",
-    "import_default_name": "Cuestionario importado"
+    "import_default_name": "Cuestionario importado",
+    "import_into": "Importar campos",
+    "import_into_btn": "Importar campos al cuestionario",
+    "import_into_target": "Cuestionario destino"
   },
   "settings": {
     "title": "Ajustes",

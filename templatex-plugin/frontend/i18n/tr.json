@@ -190,7 +190,10 @@
     "import_error_empty": "Lütfen önce metin yapıştırın veya bir dosya yükleyin.",
     "import_source": "Kaynak / Yedek",
     "import_col_hint": "İpucu",
-    "import_default_name": "İçe Aktarılan Anket"
+    "import_default_name": "İçe Aktarılan Anket",
+    "import_into": "Alanları İçe Aktar",
+    "import_into_btn": "Alanları Ankete Aktar",
+    "import_into_target": "Hedef anket"
   },
   "settings": {
     "title": "Ayarlar",

@@ -46,6 +46,7 @@ export default {
       importParsedFields: null,
       importFormName: "",
       importError: null,
+      importTargetFormId: null,
     };
 
     // =========================================================================
@@ -738,6 +739,10 @@ export default {
     function renderFormImport() {
       const parsed = state.importParsedFields;
       const hasPreview = parsed && parsed.length > 0;
+      const isIntoExisting = !!state.importTargetFormId;
+      const targetForm = isIntoExisting
+        ? (state.forms || []).find((f) => f.id === state.importTargetFormId)
+        : null;
 
       const inputSection = `
         <div class="tx-card p-6 space-y-4">
@@ -775,16 +780,24 @@ export default {
           )
           .join("");
 
+        const nameBlock = isIntoExisting
+          ? `<p class="text-sm tx-secondary">${T("questionnaires.import_into_target")}: <strong>${escHtml(targetForm?.name || state.importTargetFormId)}</strong></p>`
+          : `<div>
+                <label class="tx-label">${T("questionnaires.form_name")}</label>
+                <input id="tx-import-form-name" class="tx-input" value="${escHtml(state.importFormName || "")}" placeholder="${T("questionnaires.form_name")}" />
+              </div>`;
+
+        const actionLabel = isIntoExisting
+          ? T("questionnaires.import_into_btn")
+          : T("questionnaires.import_create");
+
         previewSection = `
           <div class="tx-card p-6 space-y-4">
             <div class="flex items-center justify-between">
               <h4 class="text-sm font-medium">${T("questionnaires.import_preview")} (${parsed.length} ${T("questionnaires.import_fields_found")})</h4>
             </div>
             <div class="space-y-3">
-              <div>
-                <label class="tx-label">${T("questionnaires.form_name")}</label>
-                <input id="tx-import-form-name" class="tx-input" value="${escHtml(state.importFormName || "")}" placeholder="${T("questionnaires.form_name")}" />
-              </div>
+              ${nameBlock}
             </div>
             <div class="overflow-x-auto">
               <table class="w-full text-left">
@@ -802,13 +815,17 @@ export default {
                 <tbody>${previewRows}</tbody>
               </table>
             </div>
-            <button data-action="import-create" class="tx-btn">${ICONS.check} ${T("questionnaires.import_create")}</button>
+            <button data-action="import-create" class="tx-btn">${ICONS.check} ${actionLabel}</button>
           </div>`;
       }
 
+      const title = isIntoExisting
+        ? T("questionnaires.import_into")
+        : T("questionnaires.import_title");
+
       return `<div class="mt-4 space-y-4">
         <button data-action="back-questionnaires" class="flex items-center gap-1 text-sm transition-colors" style="color:var(--txt-secondary)">${ICONS.back} ${T("app.back")}</button>
-        <h3 class="text-lg font-medium">${T("questionnaires.import_title")}</h3>
+        <h3 class="text-lg font-medium">${title}</h3>
         ${inputSection}
         ${previewSection}
       </div>`;
@@ -861,7 +878,10 @@ export default {
               </table>
             </div>
           `
-              : `<p class="text-sm tx-secondary">${T("questionnaires.fields")}: 0</p>`
+              : `<div class="space-y-3">
+              <p class="text-sm tx-secondary">${T("questionnaires.fields")}: 0</p>
+              <button data-action="import-into-form" class="tx-btn tx-btn-sm tx-btn-ghost">${ICONS.upload} ${T("questionnaires.import_into")}</button>
+            </div>`
           }
         </div>
       </div>`;
@@ -1822,6 +1842,21 @@ export default {
           state.importFormName = "";
           state.importError = null;
           state._importText = "";
+          state.importTargetFormId = null;
+          render();
+        },
+      );
+
+      el.querySelector('[data-action="import-into-form"]')?.addEventListener(
+        "click",
+        () => {
+          state.showImport = true;
+          state.importParsedFields = null;
+          state.importFormName = "";
+          state.importError = null;
+          state._importText = "";
+          state.importTargetFormId = state.selectedForm?.id || null;
+          state.selectedForm = null;
           render();
         },
       );
@@ -1882,11 +1917,6 @@ export default {
       el.querySelector('[data-action="import-create"]')?.addEventListener(
         "click",
         async () => {
-          const nameInput = el.querySelector("#tx-import-form-name");
-          const name =
-            nameInput?.value?.trim() ||
-            state.importFormName ||
-            T("questionnaires.import_default_name");
           const fields = state.importParsedFields || [];
 
           if (fields.length === 0) {
@@ -1895,16 +1925,29 @@ export default {
           }
 
           try {
-            await api("/forms", {
-              method: "POST",
-              body: JSON.stringify({ name, language: "de", fields }),
-            });
+            if (state.importTargetFormId) {
+              await api(`/forms/${state.importTargetFormId}`, {
+                method: "PUT",
+                body: JSON.stringify({ fields }),
+              });
+            } else {
+              const nameInput = el.querySelector("#tx-import-form-name");
+              const name =
+                nameInput?.value?.trim() ||
+                state.importFormName ||
+                T("questionnaires.import_default_name");
+              await api("/forms", {
+                method: "POST",
+                body: JSON.stringify({ name, language: "de", fields }),
+              });
+            }
             showToast(T("app.saved"));
             state.showImport = false;
             state.importParsedFields = null;
             state.importFormName = "";
             state.importError = null;
             state._importText = "";
+            state.importTargetFormId = null;
             await fetchForms();
             render();
           } catch (err) {
@@ -2371,6 +2414,7 @@ export default {
             state.showImport = false;
             state.importParsedFields = null;
             state.importError = null;
+            state.importTargetFormId = null;
             render();
           }),
       );
