@@ -39,6 +39,7 @@ export default {
       extracting: false,
       generating: false,
       parsing: false,
+      parseStep: 0,
       editingVarKey: null,
       selectedGenerateTemplate: null,
       showImport: false,
@@ -1553,8 +1554,8 @@ export default {
         <h4 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3 flex items-center gap-2">${ICONS.clipboard} ${T("records.section_data")}</h4>
         ${
           fields.length > 0
-            ? `<form id="tx-entry-data-form" class="space-y-3 max-w-lg">${fieldsHtml}
-              <button type="submit" class="tx-btn tx-btn-sm">${T("app.save")}</button>
+            ? `<form id="tx-entry-data-form" class="grid grid-cols-1 sm:grid-cols-2 gap-3">${fieldsHtml}
+              <div class="sm:col-span-2"><button type="submit" class="tx-btn tx-btn-sm">${T("app.save")}</button></div>
             </form>`
             : Object.keys(formData).length > 0
               ? `<div class="rounded border dark:border-gray-700 divide-y dark:divide-gray-700 px-3">${fieldsHtml}</div>`
@@ -1573,11 +1574,13 @@ export default {
         ? `<p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">${escHtml(field.hint)}</p>`
         : "";
 
+      const wideTypes = ["textarea", "list", "table"];
+      const spanClass = wideTypes.includes(field.type) ? "sm:col-span-2" : "";
+
       if (field.type === "checkbox") {
-        const checked = value === true || value === "true" || value === "Ja";
-        return `<div>
+        return `<div class="${spanClass}">
           <label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" id="${fid}" name="${escHtml(field.key)}" ${checked ? "checked" : ""} class="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 h-4 w-4" />
+            <input type="checkbox" id="${fid}" name="${escHtml(field.key)}" ${(value === true || value === "true" || value === "Ja") ? "checked" : ""} class="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 h-4 w-4" />
             <span class="text-sm font-medium">${escHtml(field.label || field.key)}${reqMark}</span>
           </label>${hint}
         </div>`;
@@ -1648,7 +1651,7 @@ export default {
           input = `<input type="text" id="${fid}" name="${escHtml(field.key)}" value="${escHtml(String(value ?? ""))}" class="tx-input" ${req} />`;
       }
 
-      return `<div>${label}${input}${hint}</div>`;
+      return `<div class="${spanClass}">${label}${input}${hint}</div>`;
     }
 
     // --- Section: Files ---
@@ -1657,46 +1660,54 @@ export default {
       const hasCv = !!entry.files?.cv;
       const additionalDocs = entry.files?.additional || [];
       const cvInfo = hasCv ? entry.files.cv : null;
-      const hasAnyFile = hasCv || additionalDocs.length > 0;
-      const parseStatus = state.parsing
-        ? `<div class="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400"><div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div> ${T("records.parse_running")}</div>`
-        : "";
+      const allFiles = [];
+      if (cvInfo) allFiles.push({ ...cvInfo, slot: "cv" });
+      for (const d of additionalDocs) allFiles.push({ ...d, slot: "additional" });
+      const hasAnyFile = allFiles.length > 0;
+
+      const fileListHtml = allFiles.length > 0
+        ? allFiles.map((f) => `<div class="flex items-center gap-2 py-1">
+            <span style="color:var(--status-success)">${ICONS.check}</span>
+            <span class="text-xs flex-1 truncate">${escHtml(f.filename)}</span>
+            <span class="text-xs tx-secondary">${f.size ? (f.size / 1024 > 1024 ? (f.size / 1048576).toFixed(1) + " MB" : Math.round(f.size / 1024) + " KB") : ""}</span>
+          </div>`).join("")
+        : `<p class="text-xs tx-secondary py-2">${T("records.no_files")}</p>`;
+
+      let progressHtml = "";
+      if (state.parsing) {
+        const steps = [T("records.analyze_step_upload"), T("records.analyze_step_ocr"), T("records.analyze_step_ai"), T("records.analyze_step_done")];
+        const step = state.parseStep || 0;
+        const pct = Math.min(95, 15 + step * 28);
+        progressHtml = `<div class="mt-3 space-y-2">
+          <div class="flex items-center gap-2 text-sm font-medium" style="color:var(--brand)">
+            <div class="animate-spin rounded-full h-4 w-4 border-2 border-current border-t-transparent"></div>
+            ${T("records.analyzing")}
+          </div>
+          <div class="w-full rounded-full h-2" style="background:var(--divider)">
+            <div class="h-2 rounded-full transition-all duration-700" style="width:${pct}%;background:var(--brand)"></div>
+          </div>
+          <div class="flex justify-between text-xs tx-secondary">
+            ${steps.map((s, i) => `<span${i <= step ? ' style="color:var(--brand);font-weight:500"' : ""}>${s}</span>`).join("")}
+          </div>
+        </div>`;
+      }
+
       return `<div class="tx-card p-6">
         <h4 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3 flex items-center gap-2">${ICONS.file} ${T("records.section_files")}</h4>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div class="rounded border dark:border-gray-700 p-3">
-            <div class="text-xs font-medium mb-2">${T("records.upload_doc")}</div>
-            ${hasCv ? `<p class="text-xs text-green-600 dark:text-green-400 mb-2">${ICONS.check} ${escHtml(cvInfo.filename || "cv.pdf")}</p>` : ""}
-            <label class="flex items-center justify-center gap-1.5 cursor-pointer text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 border border-dashed border-gray-300 dark:border-gray-600 rounded p-2 transition-colors hover:border-blue-400">
-              ${ICONS.upload} ${hasCv ? T("records.re_upload") || T("app.upload") : T("app.upload")}
-              <input type="file" id="tx-cv-upload" accept=".pdf" class="hidden" />
-            </label>
-          </div>
-          <div class="rounded border dark:border-gray-700 p-3">
-            <div class="text-xs font-medium mb-2">${T("records.upload_extra")}</div>
-            ${additionalDocs.length > 0 ? additionalDocs.map((d) => `<p class="text-xs text-green-600 dark:text-green-400 mb-1">${ICONS.check} ${escHtml(d.filename)}</p>`).join("") : ""}
-            <label class="flex items-center justify-center gap-1.5 cursor-pointer text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 border border-dashed border-gray-300 dark:border-gray-600 rounded p-2 transition-colors hover:border-blue-400">
-              ${ICONS.upload} ${T("app.upload")}
-              <input type="file" id="tx-doc-upload" class="hidden" />
-            </label>
-          </div>
+        <div class="space-y-2">
+          ${fileListHtml}
         </div>
-        ${
-          hasAnyFile
-            ? `
-        <div class="mt-3 pt-3 border-t dark:border-gray-700">
-          ${parseStatus}
-          ${
-            !state.parsing
-              ? `<button data-action="parse-documents" class="tx-btn tx-btn-sm flex items-center gap-1.5" ${!hasAnyFile ? "disabled" : ""}>
+        <div class="mt-3 flex items-center gap-2 flex-wrap">
+          <label class="tx-btn tx-btn-sm tx-btn-ghost cursor-pointer">
+            ${ICONS.upload} ${hasAnyFile ? T("records.upload_more") : T("records.upload_doc")}
+            <input type="file" id="tx-doc-upload-unified" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.tiff,.tif,.bmp,.txt,.rtf,.odt,.xls,.xlsx,.pptx" multiple class="hidden" />
+          </label>
+          ${hasAnyFile && !state.parsing ? `<button data-action="parse-documents" class="tx-btn tx-btn-sm flex items-center gap-1.5">
             ${ICONS.sparkle} ${T("records.parse_btn")}
-          </button>
-          <p class="text-xs tx-secondary mt-1.5">${T("records.parse_hint")}</p>`
-              : ""
-          }
-        </div>`
-            : ""
-        }
+          </button>` : ""}
+        </div>
+        ${hasAnyFile && !state.parsing ? `<p class="text-xs tx-secondary mt-1.5">${T("records.parse_hint")}</p>` : ""}
+        ${progressHtml}
       </div>`;
     }
 
@@ -2668,36 +2679,28 @@ export default {
         }),
       );
 
-      // --- Entry detail: file uploads ---
-      const cvUpload = el.querySelector("#tx-cv-upload");
-      if (cvUpload) {
-        cvUpload.addEventListener("change", async () => {
-          const file = cvUpload.files[0];
-          if (!file || !state.selectedEntry) return;
+      // --- Entry detail: unified file upload ---
+      const unifiedUpload = el.querySelector("#tx-doc-upload-unified");
+      if (unifiedUpload) {
+        unifiedUpload.addEventListener("change", async () => {
+          const files = Array.from(unifiedUpload.files || []);
+          if (!files.length || !state.selectedEntry) return;
+          const eid = state.selectedEntry.id;
+          const hasCvAlready = !!state.selectedEntry.files?.cv;
           try {
-            await apiUpload(
-              `/candidates/${state.selectedEntry.id}/upload-cv`,
-              file,
-            );
+            for (let i = 0; i < files.length; i++) {
+              const file = files[i];
+              if (i === 0 && !hasCvAlready) {
+                await apiUpload(`/candidates/${eid}/upload-cv`, file);
+              } else {
+                await apiUpload(`/candidates/${eid}/upload-doc`, file);
+              }
+            }
             showToast(T("records.doc_uploaded"));
-            await handleSelectEntry(state.selectedEntry.id);
-          } catch (err) {
-            showToast(err.message, "error");
-          }
-        });
-      }
-      const docUpload = el.querySelector("#tx-doc-upload");
-      if (docUpload) {
-        docUpload.addEventListener("change", async () => {
-          const file = docUpload.files[0];
-          if (!file || !state.selectedEntry) return;
-          try {
-            await apiUpload(
-              `/candidates/${state.selectedEntry.id}/upload-doc`,
-              file,
-            );
-            showToast(T("records.doc_uploaded"));
-            await handleSelectEntry(state.selectedEntry.id);
+            const d = await api(`/candidates/${eid}`);
+            state.selectedEntry = d.candidate;
+            render();
+            handleUploadAndParse(eid);
           } catch (err) {
             showToast(err.message, "error");
           }
@@ -3046,14 +3049,22 @@ export default {
       render();
     }
 
-    async function handleParseDocuments(entryId) {
+    async function handleUploadAndParse(entryId) {
       state.parsing = true;
+      state.parseStep = 0;
+      render();
+      await new Promise((r) => setTimeout(r, 400));
+      state.parseStep = 1;
       render();
       await refreshAccessToken();
       try {
+        state.parseStep = 2;
+        render();
         const d = await api(`/candidates/${entryId}/parse-documents`, {
           method: "POST",
         });
+        state.parseStep = 3;
+        render();
         if (d.success && d.suggestions) {
           const entry = state.selectedEntry;
           const merged = { ...(entry.field_values || {}) };
@@ -3068,16 +3079,19 @@ export default {
           });
           const updated = await api(`/candidates/${entryId}`);
           state.selectedEntry = updated.candidate;
-          showToast(
-            T("records.parse_done", `Parsed ${d.documents_parsed} document(s)`),
-            "success",
-          );
+          await loadEntryVariables(entryId);
+          showToast(T("records.parse_done"), "success");
         }
       } catch (err) {
         showToast(err.message, "error");
       }
       state.parsing = false;
+      state.parseStep = 0;
       render();
+    }
+
+    async function handleParseDocuments(entryId) {
+      return handleUploadAndParse(entryId);
     }
 
     async function loadEntryVariables(entryId) {

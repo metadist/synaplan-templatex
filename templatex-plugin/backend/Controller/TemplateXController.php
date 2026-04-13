@@ -36,6 +36,7 @@ class TemplateXController extends AbstractController
     private const DATA_TYPE_CANDIDATE = 'templatex_candidate';
     private const DATA_TYPE_TEMPLATE = 'templatex_template';
     private const DATA_TYPE_VALIDATION = 'templatex_validation';
+    private const ALLOWED_UPLOAD_EXTENSIONS = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'tiff', 'tif', 'bmp', 'txt', 'rtf', 'odt', 'xls', 'xlsx', 'pptx'];
 
     private const DEFAULT_VARIABLE_SOURCES = [
         'firstname' => ['primary' => 'form', 'fallback' => 'ai'],
@@ -790,7 +791,7 @@ class TemplateXController extends AbstractController
     #[Route('/candidates/{candidateId}/upload-cv', name: 'candidates_upload_cv', methods: ['POST'])]
     #[OA\Post(
         path: '/api/v1/user/{userId}/plugins/templatex/candidates/{candidateId}/upload-cv',
-        summary: 'Upload primary document (PDF)',
+        summary: 'Upload primary document',
         security: [['ApiKey' => []]],
         tags: ['TemplateX Plugin']
     )]
@@ -812,8 +813,8 @@ class TemplateXController extends AbstractController
         }
 
         $ext = strtolower($file->getClientOriginalExtension());
-        if ($ext !== 'pdf') {
-            return $this->json(['success' => false, 'error' => 'Only PDF files are allowed for CV upload'], Response::HTTP_BAD_REQUEST);
+        if (!in_array($ext, self::ALLOWED_UPLOAD_EXTENSIONS, true)) {
+            return $this->json(['success' => false, 'error' => 'Unsupported file type: ' . $ext], Response::HTTP_BAD_REQUEST);
         }
 
         $dir = $this->uploadDir . '/' . $userId . '/templatex/candidates/' . $candidateId;
@@ -821,13 +822,15 @@ class TemplateXController extends AbstractController
             mkdir($dir, 0755, true);
         }
 
-        $file->move($dir, 'cv.pdf');
+        $originalName = $file->getClientOriginalName();
+        $storedName = 'cv.' . $ext;
+        $file->move($dir, $storedName);
 
         $existing['files']['cv'] = [
-            'filename' => $file->getClientOriginalName(),
-            'stored_as' => 'cv.pdf',
-            'mime_type' => 'application/pdf',
-            'size' => filesize($dir . '/cv.pdf'),
+            'filename' => $originalName,
+            'stored_as' => $storedName,
+            'mime_type' => $file->getClientMimeType() ?? mime_content_type($dir . '/' . $storedName) ?? 'application/octet-stream',
+            'size' => filesize($dir . '/' . $storedName),
             'uploaded_at' => date('c'),
         ];
         $existing['updated_at'] = date('c');
@@ -926,8 +929,10 @@ class TemplateXController extends AbstractController
         }
 
         try {
-            $relativePath = $userId . '/templatex/candidates/' . $candidateId . '/cv.pdf';
-            [$rawText, $extractMeta] = $this->fileProcessor->extractText($relativePath, 'pdf', $userId);
+            $storedAs = $entry['files']['cv']['stored_as'] ?? 'cv.pdf';
+            $ext = strtolower(pathinfo($storedAs, PATHINFO_EXTENSION));
+            $relativePath = $userId . '/templatex/candidates/' . $candidateId . '/' . $storedAs;
+            [$rawText, $extractMeta] = $this->fileProcessor->extractText($relativePath, $ext, $userId);
             $rawText = $rawText ?? '';
 
             if (empty(trim($rawText))) {
