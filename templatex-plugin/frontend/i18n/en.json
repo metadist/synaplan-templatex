@@ -137,7 +137,9 @@
     "generate_select_tpl": "Choose a document template",
     "generated_docs": "Generated Documents",
     "no_generated_docs": "No documents generated yet",
-    "download_doc": "Download"
+    "download_doc": "Download",
+    "generate_no_vars": "Fill the questionnaire or run AI extraction to populate variables for document generation.",
+    "extract_hint": "Extracts structured profile data (career history, contact details) from the primary CV into template variables."
   },
   "documents": {
     "title": "Document Templates",

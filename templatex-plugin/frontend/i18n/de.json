@@ -137,7 +137,9 @@
     "generate_select_tpl": "Zielvorlage auswählen",
     "generated_docs": "Generierte Dokumente",
     "no_generated_docs": "Noch keine Dokumente generiert",
-    "download_doc": "Herunterladen"
+    "download_doc": "Herunterladen",
+    "generate_no_vars": "Füllen Sie den Fragebogen aus oder starten Sie die KI-Extraktion, um Variablen für die Dokumentgenerierung zu befüllen.",
+    "extract_hint": "Extrahiert strukturierte Profildaten (Werdegang, Kontaktdaten) aus dem Lebenslauf in Vorlagen-Variablen."
   },
   "documents": {
     "title": "Zielvorlagen",

@@ -137,7 +137,9 @@
     "generate_select_tpl": "Elegir plantilla de documento",
     "generated_docs": "Documentos generados",
     "no_generated_docs": "Aún no hay documentos generados",
-    "download_doc": "Descargar"
+    "download_doc": "Descargar",
+    "generate_no_vars": "Complete el cuestionario o ejecute la extracción con IA para llenar las variables de generación de documentos.",
+    "extract_hint": "Extrae datos de perfil estructurados (historial laboral, datos de contacto) del CV principal en variables de plantilla."
   },
   "documents": {
     "title": "Plantillas de Documento",

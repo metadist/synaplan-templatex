@@ -1447,6 +1447,7 @@ export default {
             ${ICONS.sparkle} ${state.extracting ? T("records.extract_running") : isExtracted ? T("records.re_extract") : T("records.extract_btn")}
           </button>
         </div>
+        <p class="text-xs tx-secondary mt-2">${T("records.extract_hint")}</p>
       </div>`;
     }
 
@@ -1454,11 +1455,6 @@ export default {
 
     function renderEntryVariablesSection() {
       const e = state.selectedEntry;
-      const isExtracted =
-        e.status === "extracted" ||
-        e.status === "reviewed" ||
-        e.status === "generated";
-      if (!isExtracted && !state.entryVariables) return "";
       if (state.entryVariablesLoading) {
         return `<div class="tx-card p-6">
           <h4 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3 flex items-center gap-2">${ICONS.clipboard} ${T("records.section_variables")}</h4>
@@ -1591,7 +1587,12 @@ export default {
         state.entryVariables &&
         state.entryVariables.filter((v) => v.type !== "station").length > 0;
       const hasTpls = state.templates && state.templates.length > 0;
-      if (!hasVars) return "";
+      if (!hasVars) {
+        return `<div class="tx-card p-6">
+          <h4 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3 flex items-center gap-2">${ICONS.doc} ${T("records.section_generate")}</h4>
+          <p class="text-sm tx-secondary">${T("records.generate_no_vars")}</p>
+        </div>`;
+      }
       const tplOptions = (state.templates || [])
         .map(
           (tpl) =>
@@ -2708,10 +2709,7 @@ export default {
         state.entryVariables = null;
         state.editingVarKey = null;
         state.selectedGenerateTemplate = null;
-        const st = d.candidate?.status;
-        if (st === "extracted" || st === "reviewed" || st === "generated") {
-          await loadEntryVariables(id);
-        }
+        await loadEntryVariables(id);
         if (!state.templates || state.templates.length === 0) {
           await fetchTemplates();
         }
