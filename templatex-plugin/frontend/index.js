@@ -1,4 +1,4 @@
-const TX_VERSION = "v0.8.0";
+const TX_VERSION = "v0.9.0";
 
 export default {
   mount(el, context) {
@@ -47,6 +47,10 @@ export default {
       importFormName: "",
       importError: null,
       importTargetFormId: null,
+      showMatching: false,
+      matchingFormId: null,
+      matchingForm: null,
+      addingFieldKey: null,
     };
 
     // =========================================================================
@@ -682,10 +686,239 @@ export default {
                 <tbody>${phRows}</tbody>
               </table>
             </div>
+            ${!state.showMatching ? `<div class="mt-4"><button data-action="show-matching" class="tx-btn tx-btn-sm tx-btn-ghost">${ICONS.clipboard} ${T("matching.title")}</button></div>` : ""}
           `
               : `<p class="text-sm tx-secondary">${T("documents.placeholder_count")}: 0</p>`
           }
         </div>
+        ${state.showMatching ? renderPlaceholderMatching() : ""}
+      </div>`;
+    }
+
+    // =========================================================================
+    // Placeholder matching
+    // =========================================================================
+
+    function placeholderMatchKey(ph) {
+      const k = (ph.key || ph.name || "").trim();
+      if (ph.type === "checkbox" || k.startsWith("checkb.")) {
+        const parts = k.replace(/^checkb\./, "").split(".");
+        return parts[0];
+      }
+      return k;
+    }
+
+    function isStructuralPlaceholder(ph) {
+      const k = (ph.key || ph.name || "").trim();
+      return ph.type === "block_marker" || k.startsWith("#") || k.startsWith("/");
+    }
+
+    function inferFieldType(ph) {
+      switch (ph.type) {
+        case "list":
+          return "list";
+        case "checkbox":
+          return "checkbox";
+        case "row_field":
+          return "text";
+        default:
+          return "text";
+      }
+    }
+
+    function renderPlaceholderMatching() {
+      const tpl = state.selectedTemplate;
+      const phs = tpl.placeholders || [];
+      const forms = state.forms || [];
+      const mf = state.matchingForm;
+      const fieldMap = {};
+      if (mf && mf.fields) {
+        for (const f of mf.fields) {
+          fieldMap[f.key] = f;
+        }
+      }
+
+      const formOptions = forms
+        .map(
+          (f) =>
+            `<option value="${f.id}"${state.matchingFormId === f.id ? " selected" : ""}>${escHtml(f.name)}${f.fields ? ` (${f.fields.length} ${T("questionnaires.field_count")})` : ""}</option>`,
+        )
+        .join("");
+
+      const selectHtml =
+        forms.length > 0
+          ? `<div class="mb-4">
+              <label class="tx-label mb-1">${T("matching.select_form")}</label>
+              <select id="tx-matching-form-select" class="tx-select" style="max-width:24rem">
+                <option value="">— ${T("matching.select_form_hint")} —</option>
+                ${formOptions}
+              </select>
+            </div>`
+          : `<p class="text-sm tx-secondary">${T("matching.no_forms")}</p>`;
+
+      let tableHtml = "";
+
+      if (mf) {
+        // Build a map of table field keys → column keys for matching
+        const tableFieldMap = {};
+        for (const f of (mf.fields || [])) {
+          if (f.type === "table" && f.columns) {
+            const colKeys = {};
+            for (const c of f.columns) colKeys[c.key] = c;
+            tableFieldMap[f.key] = { field: f, colKeys };
+          }
+        }
+
+        const dataPlaceholders = phs.filter((p) => !isStructuralPlaceholder(p));
+        const seen = new Set();
+        const deduped = [];
+        for (const ph of dataPlaceholders) {
+          const mk = placeholderMatchKey(ph);
+          if (!seen.has(mk)) {
+            seen.add(mk);
+            deduped.push(ph);
+          }
+        }
+
+        let matchedCount = 0;
+        const rows = deduped
+          .map((ph) => {
+            const mk = placeholderMatchKey(ph);
+            const formField = fieldMap[mk];
+            const isAdding = state.addingFieldKey === mk;
+
+            // Check for table column match (e.g. stationlist.time → table field stationlist, column time)
+            if (!formField && ph.type === "row_field" && mk.includes(".")) {
+              const prefix = mk.split(".")[0];
+              const colKey = mk.split(".").slice(1).join(".");
+              const tbl = tableFieldMap[prefix];
+              if (tbl && tbl.colKeys[colKey]) {
+                matchedCount++;
+                const col = tbl.colKeys[colKey];
+                return `
+                <tr class="tx-divider border-t">
+                  <td class="py-2.5 px-3">
+                    <span class="font-mono text-sm">${escHtml(ph.key || ph.name)}</span>
+                    <span class="ml-1.5 text-xs tx-secondary">${escHtml(ph.type || "text")}</span>
+                  </td>
+                  <td class="py-2.5 px-3">
+                    <span class="inline-flex items-center gap-1.5 text-sm" style="color:var(--status-success)">
+                      ${ICONS.check}
+                      <span class="font-medium">${escHtml(tbl.field.label || prefix)}</span>
+                      <span class="text-xs tx-secondary">→ ${escHtml(col.label || colKey)}</span>
+                    </span>
+                  </td>
+                </tr>`;
+              }
+            }
+
+            if (formField) {
+              matchedCount++;
+              return `
+              <tr class="tx-divider border-t">
+                <td class="py-2.5 px-3">
+                  <span class="font-mono text-sm">${escHtml(ph.key || ph.name)}</span>
+                  <span class="ml-1.5 text-xs tx-secondary">${escHtml(ph.type || "text")}</span>
+                </td>
+                <td class="py-2.5 px-3">
+                  <span class="inline-flex items-center gap-1.5 text-sm" style="color:var(--status-success)">
+                    ${ICONS.check}
+                    <span class="font-medium">${escHtml(formField.label || formField.key)}</span>
+                    <span class="text-xs tx-secondary">(${escHtml(formField.type || "text")})</span>
+                  </span>
+                </td>
+              </tr>`;
+            }
+
+            if (isAdding) {
+              const typeOpts = ["text", "textarea", "select", "list", "date", "number", "checkbox"]
+                .map(
+                  (tp) =>
+                    `<option value="${tp}"${tp === inferFieldType(ph) ? " selected" : ""}>${tp}</option>`,
+                )
+                .join("");
+              return `
+              <tr class="tx-divider border-t">
+                <td class="py-2.5 px-3">
+                  <span class="font-mono text-sm">${escHtml(ph.key || ph.name)}</span>
+                  <span class="ml-1.5 text-xs tx-secondary">${escHtml(ph.type || "text")}</span>
+                </td>
+                <td class="py-2.5 px-3">
+                  <div class="space-y-2" data-add-form-key="${escHtml(mk)}">
+                    <div class="grid grid-cols-2 gap-2" style="max-width:20rem">
+                      <input name="add_label" placeholder="${T("matching.field_label")}" class="tx-input" style="padding:.375rem .5rem" value="${escHtml(mk.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()))}" />
+                      <select name="add_type" class="tx-select" style="padding:.375rem .5rem">${typeOpts}</select>
+                    </div>
+                    <input name="add_hint" placeholder="${T("matching.field_hint")}" class="tx-input" style="padding:.375rem .5rem" />
+                    <div class="flex items-center gap-2">
+                      <button data-action="save-new-field" data-key="${escHtml(mk)}" class="tx-btn tx-btn-sm">${ICONS.check} ${T("matching.save_field")}</button>
+                      <button data-action="cancel-add-field" class="tx-btn tx-btn-sm tx-btn-ghost">${T("app.cancel")}</button>
+                    </div>
+                  </div>
+                </td>
+              </tr>`;
+            }
+
+            return `
+            <tr class="tx-divider border-t">
+              <td class="py-2.5 px-3">
+                <span class="font-mono text-sm">${escHtml(ph.key || ph.name)}</span>
+                <span class="ml-1.5 text-xs tx-secondary">${escHtml(ph.type || "text")}</span>
+              </td>
+              <td class="py-2.5 px-3">
+                <span class="inline-flex items-center gap-1.5 text-sm" style="color:var(--status-warning,#d97706)">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                  <span>${T("matching.unmatched")}</span>
+                </span>
+                <button data-action="add-field-to-form" data-key="${escHtml(mk)}" class="ml-2 tx-btn tx-btn-sm tx-btn-ghost" style="font-size:.75rem">${ICONS.plus} ${T("matching.add_to_form")}</button>
+              </td>
+            </tr>`;
+          })
+          .join("");
+
+        const totalMatchable = deduped.length;
+        const allMatched = matchedCount === totalMatchable;
+        const summaryText = allMatched
+          ? T("matching.all_matched")
+          : T("matching.summary")
+              .replace("{matched}", matchedCount)
+              .replace("{total}", totalMatchable);
+        const summaryColor = allMatched ? "var(--status-success)" : "var(--txt-secondary)";
+
+        const structuralPhs = phs.filter((p) => isStructuralPlaceholder(p));
+        const structuralHtml =
+          structuralPhs.length > 0
+            ? `<div class="mt-3 text-xs tx-secondary">
+                <span class="font-medium">${T("matching.structural_group")}:</span>
+                ${structuralPhs.map((p) => `<code class="ml-1">${escHtml(p.key || p.name)}</code>`).join(", ")}
+              </div>`
+            : "";
+
+        tableHtml = `
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-sm font-medium" style="color:${summaryColor}">${summaryText}</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left">
+              <thead>
+                <tr class="tx-divider border-b text-xs tx-secondary uppercase tracking-wider">
+                  <th class="py-2 px-3" style="width:45%">${T("matching.placeholder_col")}</th>
+                  <th class="py-2 px-3">${T("matching.field_col")}</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+          ${structuralHtml}`;
+      }
+
+      return `<div class="tx-card p-6 mt-4">
+        <div class="flex items-center justify-between mb-4">
+          <h4 class="text-base font-medium">${T("matching.title")}</h4>
+          <button data-action="hide-matching" class="text-sm tx-link">${T("app.close")}</button>
+        </div>
+        ${selectHtml}
+        ${tableHtml}
       </div>`;
     }
 
@@ -887,6 +1120,27 @@ export default {
       </div>`;
     }
 
+    function renderTableColumnEditor(fieldIdx, columns) {
+      const colRows = columns
+        .map(
+          (col, ci) => `
+          <div class="flex items-center gap-2" data-col-idx="${ci}">
+            <input name="fc_${fieldIdx}_ck_${ci}" value="${escHtml(col.key || "")}" placeholder="${T("questionnaires.column_key")}" class="tx-input text-xs" style="padding:.25rem .5rem;flex:1" />
+            <input name="fc_${fieldIdx}_cl_${ci}" value="${escHtml(col.label || "")}" placeholder="${T("questionnaires.column_label")}" class="tx-input text-xs" style="padding:.25rem .5rem;flex:1" />
+            <button type="button" data-action="remove-table-col" data-field-idx="${fieldIdx}" data-col-idx="${ci}" class="p-0.5 transition-colors" style="color:var(--txt-secondary)" title="${T("questionnaires.remove_column")}">${ICONS.trash}</button>
+          </div>`,
+        )
+        .join("");
+
+      return `<div class="mt-1.5 ml-0 p-2 rounded" style="background:var(--bg-app);border:1px dashed var(--divider)">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-xs font-medium tx-secondary">${T("questionnaires.table_columns")}</span>
+          <button type="button" data-action="add-table-col" data-field-idx="${fieldIdx}" class="tx-link text-xs flex items-center gap-1">${ICONS.plus} ${T("questionnaires.add_column")}</button>
+        </div>
+        <div class="space-y-1.5" data-table-cols="${fieldIdx}">${colRows}</div>
+      </div>`;
+    }
+
     function renderFormEditor() {
       const editing = state.editingForm;
       const isNew = !editing;
@@ -925,6 +1179,7 @@ export default {
                   "date",
                   "number",
                   "checkbox",
+                  "table",
                 ]
                   .map(
                     (tp) =>
@@ -940,6 +1195,7 @@ export default {
             <button data-action="remove-form-field" data-idx="${idx}" class="p-1 transition-colors mt-1" style="color:var(--txt-secondary)" title="${T("questionnaires.remove_field")}">${ICONS.trash}</button>
           </div>
           ${fd.type === "select" ? `<div class="mt-1.5 ml-0"><input name="fo_${idx}" value="${escHtml(optsStr)}" placeholder="${T("questionnaires.field_options_hint")}" class="tx-input text-xs" style="padding:.25rem .5rem" /></div>` : ""}
+          ${fd.type === "table" ? renderTableColumnEditor(idx, fd.columns || []) : ""}
           <div class="mt-1.5 ml-0"><input name="fh_${idx}" value="${escHtml(fd.hint || "")}" placeholder="${T("questionnaires.field_hint")}" class="tx-input text-xs" style="padding:.25rem .5rem" /></div>
         </div>`;
         })
@@ -1360,6 +1616,34 @@ export default {
         case "number":
           input = `<input type="number" id="${fid}" name="${escHtml(field.key)}" value="${escHtml(String(value ?? ""))}" class="tx-input" ${req} />`;
           break;
+        case "table": {
+          const cols = field.columns || [];
+          const rows = Array.isArray(value) ? value : [];
+          const headerCells = cols
+            .map((c) => `<th class="py-1.5 px-2 text-xs tx-secondary font-medium">${escHtml(c.label || c.key)}</th>`)
+            .join("");
+          const dataRows = rows
+            .map(
+              (row, ri) =>
+                `<tr class="tx-divider border-t">${cols
+                  .map(
+                    (c) =>
+                      `<td class="py-1 px-1"><input name="${escHtml(field.key)}__${ri}__${escHtml(c.key)}" value="${escHtml(String(row[c.key] ?? ""))}" class="tx-input text-xs" style="padding:.25rem .375rem" /></td>`,
+                  )
+                  .join("")}<td class="py-1 px-1 text-center"><button type="button" data-action="remove-table-row" data-field-key="${escHtml(field.key)}" data-row-idx="${ri}" class="p-0.5 transition-colors" style="color:var(--txt-secondary)">${ICONS.trash}</button></td></tr>`,
+            )
+            .join("");
+          const emptyMsg = rows.length === 0 ? `<tr><td colspan="${cols.length + 1}" class="py-3 text-center text-xs tx-secondary">${T("records.table_empty")}</td></tr>` : "";
+          input = `<div class="overflow-x-auto rounded" style="border:1px solid var(--divider)">
+            <table class="w-full text-left">
+              <thead><tr class="tx-divider border-b">${headerCells}<th class="py-1.5 px-2" style="width:2rem"></th></tr></thead>
+              <tbody>${dataRows}${emptyMsg}</tbody>
+            </table>
+          </div>
+          <button type="button" data-action="add-table-row" data-field-key="${escHtml(field.key)}" class="mt-1.5 tx-link text-xs flex items-center gap-1">${ICONS.plus} ${T("records.add_row")}</button>
+          <input type="hidden" name="${escHtml(field.key)}__table_marker" value="1" />`;
+          break;
+        }
         default:
           input = `<input type="text" id="${fid}" name="${escHtml(field.key)}" value="${escHtml(String(value ?? ""))}" class="tx-input" ${req} />`;
       }
@@ -1471,11 +1755,11 @@ export default {
           <p class="text-sm tx-secondary">${T("app.no_data")}</p>
         </div>`;
       }
-      const regularVars = vars.filter((v) => v.type !== "station");
-      const stationVars = vars.filter((v) => v.type === "station");
+      const regularVars = vars.filter((v) => v.type !== "table");
+      const tableVars = vars.filter((v) => v.type === "table");
       const rows = regularVars.map((v) => renderVariableRow(v, e.id)).join("");
-      const stationRows = stationVars
-        .map((v) => renderStationGroup(v))
+      const tableRows = tableVars
+        .map((v) => renderTableGroup(v))
         .join("");
       return `<div class="tx-card p-6">
         <h4 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3 flex items-center gap-2">${ICONS.clipboard} ${T("records.section_variables")}</h4>
@@ -1492,7 +1776,7 @@ export default {
             <tbody>${rows}</tbody>
           </table>
         </div>
-        ${stationRows}
+        ${tableRows}
       </div>`;
     }
 
@@ -1548,35 +1832,38 @@ export default {
       </tr>`;
     }
 
-    function renderStationGroup(v) {
-      const stations = Array.isArray(v.value) ? v.value : [];
-      if (stations.length === 0) return "";
-      const stationRows = stations
-        .map((s, idx) => {
-          const fields = Object.entries(s)
-            .map(
-              ([k, val]) =>
-                `<div class="flex justify-between py-1">
-            <span class="text-xs text-gray-600 dark:text-gray-400">${escHtml(k)}</span>
-            <span class="text-xs font-medium text-gray-900 dark:text-gray-100 text-right max-w-[65%]">${escHtml(String(val ?? ""))}</span>
-          </div>`,
-            )
-            .join("");
-          return `<div class="rounded border border-gray-200 dark:border-gray-600 p-3 bg-white dark:bg-gray-700">
-          <div class="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">#${idx + 1}</div>
-          ${fields}
-        </div>`;
-        })
+    function renderTableGroup(v) {
+      const tableRows = Array.isArray(v.value) ? v.value : [];
+      if (tableRows.length === 0) return "";
+      const cols = v.columns || [];
+      const colLabels = cols.length > 0 ? cols : Object.keys(tableRows[0] || {}).map((k) => ({ key: k, label: k }));
+
+      const headerCells = colLabels
+        .map((c) => `<th class="py-1.5 px-2 text-xs tx-secondary font-medium">${escHtml(c.label || c.key)}</th>`)
         .join("");
+      const bodyRows = tableRows
+        .map(
+          (row) =>
+            `<tr class="tx-divider border-t">${colLabels
+              .map((c) => `<td class="py-1.5 px-2 text-xs">${escHtml(String(row[c.key] ?? ""))}</td>`)
+              .join("")}</tr>`,
+        )
+        .join("");
+
       const srcLabel =
-        v.source === "ai" ? T("records.source_ai") : T("records.source_form");
+        v.source === "ai" ? T("records.source_ai") : v.source === "override" ? T("records.source_override") : T("records.source_form");
       return `<div class="mt-4">
         <button data-action="toggle-station" data-station-key="${escHtml(v.key)}" class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
           <span class="tx-station-chevron" data-key="${escHtml(v.key)}">${ICONS.chevDown}</span>
-          ${escHtml(v.key)} (${stations.length})
+          ${escHtml(v.label || v.key)} (${tableRows.length})
           <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">${srcLabel}</span>
         </button>
-        <div class="tx-station-body grid gap-2" data-key="${escHtml(v.key)}">${stationRows}</div>
+        <div class="tx-station-body overflow-x-auto" data-key="${escHtml(v.key)}">
+          <table class="w-full text-left" style="border:1px solid var(--divider);border-radius:.375rem">
+            <thead><tr class="tx-divider border-b">${headerCells}</tr></thead>
+            <tbody>${bodyRows}</tbody>
+          </table>
+        </div>
       </div>`;
     }
 
@@ -1712,6 +1999,37 @@ export default {
     // =========================================================================
     // Event binding
     // =========================================================================
+
+    function collectFormEditorState() {
+      const formEl = el.querySelector("#tx-form-editor");
+      if (!formEl || !state.editingForm) return;
+      const fd = new FormData(formEl);
+      state.editingForm.name = fd.get("form_name")?.toString().trim() || state.editingForm.name;
+      state.editingForm.language = fd.get("form_language")?.toString() || state.editingForm.language;
+      const fields = state.editingForm.fields || [];
+      for (let idx = 0; idx < fields.length; idx++) {
+        if (fd.has(`fk_${idx}`)) {
+          fields[idx].key = fd.get(`fk_${idx}`)?.toString().trim() || fields[idx].key;
+          fields[idx].label = fd.get(`fl_${idx}`)?.toString().trim() || fields[idx].label;
+          fields[idx].type = fd.get(`ft_${idx}`)?.toString() || fields[idx].type;
+          fields[idx].required = fd.has(`fr_${idx}`);
+          fields[idx].hint = fd.get(`fh_${idx}`)?.toString().trim() || "";
+          if (fields[idx].type === "select") {
+            const optRaw = fd.get(`fo_${idx}`)?.toString().trim() || "";
+            fields[idx].options = optRaw ? optRaw.split(",").map((o) => o.trim()).filter(Boolean) : [];
+          }
+          if (fields[idx].type === "table") {
+            const cols = fields[idx].columns || [];
+            for (let ci = 0; ci < cols.length; ci++) {
+              if (fd.has(`fc_${idx}_ck_${ci}`)) {
+                cols[ci].key = fd.get(`fc_${idx}_ck_${ci}`)?.toString().trim() || cols[ci].key;
+                cols[ci].label = fd.get(`fc_${idx}_cl_${ci}`)?.toString().trim() || cols[ci].label;
+              }
+            }
+          }
+        }
+      }
+    }
 
     function bindEvents() {
       // --- Navigation tabs ---
@@ -1993,6 +2311,7 @@ export default {
       el.querySelector('[data-action="add-form-field"]')?.addEventListener(
         "click",
         () => {
+          collectFormEditorState();
           const form = state.editingForm || {
             name: "",
             language: "de",
@@ -2014,10 +2333,39 @@ export default {
       // --- Form editor: remove field ---
       el.querySelectorAll('[data-action="remove-form-field"]').forEach((btn) =>
         btn.addEventListener("click", () => {
+          collectFormEditorState();
           const idx = parseInt(btn.dataset.idx);
           const form = state.editingForm;
           if (form?.fields) {
             form.fields.splice(idx, 1);
+            render();
+          }
+        }),
+      );
+
+      // --- Form editor: add table column ---
+      el.querySelectorAll('[data-action="add-table-col"]').forEach((btn) =>
+        btn.addEventListener("click", () => {
+          const fIdx = parseInt(btn.dataset.fieldIdx);
+          const form = state.editingForm;
+          if (form?.fields?.[fIdx]) {
+            collectFormEditorState();
+            if (!form.fields[fIdx].columns) form.fields[fIdx].columns = [];
+            form.fields[fIdx].columns.push({ key: "", label: "" });
+            render();
+          }
+        }),
+      );
+
+      // --- Form editor: remove table column ---
+      el.querySelectorAll('[data-action="remove-table-col"]').forEach((btn) =>
+        btn.addEventListener("click", () => {
+          const fIdx = parseInt(btn.dataset.fieldIdx);
+          const cIdx = parseInt(btn.dataset.colIdx);
+          const form = state.editingForm;
+          if (form?.fields?.[fIdx]?.columns) {
+            collectFormEditorState();
+            form.fields[fIdx].columns.splice(cIdx, 1);
             render();
           }
         }),
@@ -2053,6 +2401,18 @@ export default {
                   .split(",")
                   .map((o) => o.trim())
                   .filter(Boolean);
+              }
+              if (fieldType === "table") {
+                const columns = [];
+                let ci = 0;
+                while (fd.has(`fc_${idx}_ck_${ci}`)) {
+                  const ck = fd.get(`fc_${idx}_ck_${ci}`)?.toString().trim();
+                  const cl = fd.get(`fc_${idx}_cl_${ci}`)?.toString().trim() || ck;
+                  if (ck) columns.push({ key: ck, label: cl });
+                  ci++;
+                }
+                fieldDef.columns = columns;
+                fieldDef.source = "ai";
               }
               fields.push(fieldDef);
             }
@@ -2235,6 +2595,22 @@ export default {
           const fields = formDef?.fields || [];
           const fieldValues = {};
           for (const field of fields) {
+            if (field.type === "table") {
+              const cols = field.columns || [];
+              const rows = [];
+              let ri = 0;
+              while (entryDataForm.querySelector(`[name="${field.key}__${ri}__${cols[0]?.key}"]`)) {
+                const row = {};
+                for (const col of cols) {
+                  const cell = entryDataForm.querySelector(`[name="${field.key}__${ri}__${col.key}"]`);
+                  row[col.key] = cell?.value ?? "";
+                }
+                rows.push(row);
+                ri++;
+              }
+              fieldValues[field.key] = rows;
+              continue;
+            }
             const input = entryDataForm.querySelector(`[name="${field.key}"]`);
             if (!input) continue;
             if (field.type === "checkbox")
@@ -2267,6 +2643,30 @@ export default {
           }
         });
       }
+
+      // --- Entry detail: table row add/remove ---
+      el.querySelectorAll('[data-action="add-table-row"]').forEach((btn) =>
+        btn.addEventListener("click", () => {
+          const fieldKey = btn.dataset.fieldKey;
+          const entry = state.selectedEntry;
+          if (!entry) return;
+          if (!entry.field_values) entry.field_values = {};
+          if (!Array.isArray(entry.field_values[fieldKey])) entry.field_values[fieldKey] = [];
+          entry.field_values[fieldKey].push({});
+          render();
+        }),
+      );
+
+      el.querySelectorAll('[data-action="remove-table-row"]').forEach((btn) =>
+        btn.addEventListener("click", () => {
+          const fieldKey = btn.dataset.fieldKey;
+          const ri = parseInt(btn.dataset.rowIdx);
+          const entry = state.selectedEntry;
+          if (!entry?.field_values?.[fieldKey]) return;
+          entry.field_values[fieldKey].splice(ri, 1);
+          render();
+        }),
+      );
 
       // --- Entry detail: file uploads ---
       const cvUpload = el.querySelector("#tx-cv-upload");
@@ -2421,8 +2821,107 @@ export default {
         "click",
         () => {
           state.selectedTemplate = null;
+          state.showMatching = false;
+          state.matchingFormId = null;
+          state.matchingForm = null;
+          state.addingFieldKey = null;
           render();
         },
+      );
+
+      // --- Matching: show/hide ---
+      el.querySelector('[data-action="show-matching"]')?.addEventListener(
+        "click",
+        async () => {
+          state.showMatching = true;
+          state.addingFieldKey = null;
+          if (state.forms.length === 0) await fetchForms();
+          render();
+          const matchCard = el.querySelector("#tx-matching-form-select");
+          if (matchCard) matchCard.scrollIntoView({ behavior: "smooth", block: "center" });
+        },
+      );
+
+      el.querySelector('[data-action="hide-matching"]')?.addEventListener(
+        "click",
+        () => {
+          state.showMatching = false;
+          state.matchingFormId = null;
+          state.matchingForm = null;
+          state.addingFieldKey = null;
+          render();
+        },
+      );
+
+      // --- Matching: form selector ---
+      const matchFormSelect = el.querySelector("#tx-matching-form-select");
+      if (matchFormSelect) {
+        matchFormSelect.addEventListener("change", async () => {
+          const fid = matchFormSelect.value;
+          if (!fid) {
+            state.matchingFormId = null;
+            state.matchingForm = null;
+            state.addingFieldKey = null;
+            render();
+            return;
+          }
+          try {
+            const d = await api(`/forms/${fid}`);
+            state.matchingFormId = fid;
+            state.matchingForm = d.form;
+            state.addingFieldKey = null;
+          } catch (err) {
+            showToast(err.message, "error");
+          }
+          render();
+        });
+      }
+
+      // --- Matching: add field to form ---
+      el.querySelectorAll('[data-action="add-field-to-form"]').forEach((btn) =>
+        btn.addEventListener("click", () => {
+          state.addingFieldKey = btn.dataset.key;
+          render();
+        }),
+      );
+
+      // --- Matching: cancel add field ---
+      el.querySelector('[data-action="cancel-add-field"]')?.addEventListener(
+        "click",
+        () => {
+          state.addingFieldKey = null;
+          render();
+        },
+      );
+
+      // --- Matching: save new field ---
+      el.querySelectorAll('[data-action="save-new-field"]').forEach((btn) =>
+        btn.addEventListener("click", async () => {
+          const key = btn.dataset.key;
+          const container = el.querySelector(`[data-add-form-key="${key}"]`);
+          if (!container || !state.matchingForm) return;
+
+          const label = container.querySelector('[name="add_label"]')?.value?.trim() || key;
+          const type = container.querySelector('[name="add_type"]')?.value || "text";
+          const hint = container.querySelector('[name="add_hint"]')?.value?.trim() || "";
+
+          const newField = { key, label, type, required: false, source: "ai", hint };
+          const updatedFields = [...(state.matchingForm.fields || []), newField];
+
+          try {
+            const d = await api(`/forms/${state.matchingFormId}`, {
+              method: "PUT",
+              body: JSON.stringify({ fields: updatedFields }),
+            });
+            state.matchingForm = d.form;
+            state.addingFieldKey = null;
+            await fetchForms();
+            showToast(T("app.saved"));
+          } catch (err) {
+            showToast(err.message, "error");
+          }
+          render();
+        }),
       );
 
       el.querySelectorAll('[data-action="back-questionnaires"]').forEach(
@@ -2587,19 +3086,42 @@ export default {
         const d = await api(`/candidates/${entryId}/variables`);
         const varsMap = d.variables || {};
         const sourcesDef = d.sources || {};
-        const stationCount = d.station_count || 0;
+        const tableFieldsMeta = d.table_fields || {};
         const varList = [];
-        const stationData = [];
-        for (const [key, value] of Object.entries(varsMap)) {
-          if (key.startsWith("stations.")) {
-            const m = key.match(/^stations\.(\w+)\.(\d+)$/);
-            if (m) {
-              const field = m[1],
-                idx = parseInt(m[2]) - 1;
-              if (!stationData[idx]) stationData[idx] = {};
-              stationData[idx][field] = value;
+
+        const tableKeys = new Set(Object.keys(tableFieldsMeta));
+        // Backward compat: detect legacy stations.field.N pattern
+        if (!tableKeys.has("stations")) {
+          for (const key of Object.keys(varsMap)) {
+            if (/^stations\.\w+\.\d+$/.test(key)) {
+              tableKeys.add("stations");
+              break;
             }
+          }
+        }
+
+        for (const [key, value] of Object.entries(varsMap)) {
+          if (tableKeys.has(key) && Array.isArray(value)) {
+            const src = sourcesDef[key];
+            let source = "form";
+            const overrides = state.selectedEntry?.variable_overrides || {};
+            if (overrides[key] !== undefined && overrides[key] !== null)
+              source = "override";
+            else if (src?.primary === "ai") source = "ai";
+            varList.push({
+              key,
+              value,
+              source,
+              type: "table",
+              columns: tableFieldsMeta[key]?.columns || [],
+              label: tableFieldsMeta[key]?.label || key,
+            });
             continue;
+          }
+          // Skip legacy flat station keys (stations.field.N)
+          if (/^\w+\.\w+\.\d+$/.test(key)) {
+            const prefix = key.split(".")[0];
+            if (tableKeys.has(prefix)) continue;
           }
           const src = sourcesDef[key];
           let source = "form";
@@ -2612,14 +3134,6 @@ export default {
             value,
             source,
             type: key.startsWith("checkb.") ? "checkbox" : "text",
-          });
-        }
-        if (stationData.length > 0) {
-          varList.push({
-            key: "stations",
-            value: stationData,
-            source: "ai",
-            type: "station",
           });
         }
         state.entryVariables = varList;

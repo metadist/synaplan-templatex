@@ -140,7 +140,10 @@
     "download_doc": "Descargar",
     "generate_no_vars": "Complete el cuestionario o ejecute la extracción con IA para llenar las variables de generación de documentos.",
     "extract_hint": "Extrae datos de perfil estructurados (historial laboral, datos de contacto) del CV principal en variables de plantilla.",
-    "confirm_delete_doc": "¿Eliminar este documento generado?"
+    "confirm_delete_doc": "¿Eliminar este documento generado?",
+    "add_row": "Añadir fila",
+    "remove_row": "Eliminar",
+    "table_empty": "Sin filas aún"
   },
   "documents": {
     "title": "Plantillas de Documento",
@@ -196,7 +199,32 @@
     "import_default_name": "Cuestionario importado",
     "import_into": "Importar campos",
     "import_into_btn": "Importar campos al cuestionario",
-    "import_into_target": "Cuestionario destino"
+    "import_into_target": "Cuestionario destino",
+    "table_columns": "Columnas",
+    "add_column": "Añadir columna",
+    "remove_column": "Eliminar",
+    "column_key": "Clave de columna",
+    "column_label": "Etiqueta de columna"
+  },
+  "matching": {
+    "title": "Asignar marcadores",
+    "select_form": "Seleccionar cuestionario",
+    "select_form_hint": "Elegir un cuestionario para comparar",
+    "placeholder_col": "Marcador de plantilla",
+    "field_col": "Campo del cuestionario",
+    "matched": "Asignado",
+    "unmatched": "No está en el cuestionario",
+    "add_to_form": "Añadir al cuestionario",
+    "adding_field": "Añadir campo",
+    "field_label": "Etiqueta",
+    "field_type": "Tipo",
+    "field_hint": "Descripción (guía la extracción con IA)",
+    "save_field": "Añadir campo",
+    "cancel": "Cancelar",
+    "summary": "{matched} de {total} marcadores asignados",
+    "all_matched": "Todos los marcadores están cubiertos por el cuestionario",
+    "no_forms": "No hay cuestionarios disponibles. Cree uno primero.",
+    "structural_group": "Estructural (marcadores de bloque/fila)"
   },
   "settings": {
     "title": "Ajustes",

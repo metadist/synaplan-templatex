@@ -140,7 +140,10 @@
     "download_doc": "Herunterladen",
     "generate_no_vars": "Füllen Sie den Fragebogen aus oder starten Sie die KI-Extraktion, um Variablen für die Dokumentgenerierung zu befüllen.",
     "extract_hint": "Extrahiert strukturierte Profildaten (Werdegang, Kontaktdaten) aus dem Lebenslauf in Vorlagen-Variablen.",
-    "confirm_delete_doc": "Dieses generierte Dokument wirklich löschen?"
+    "confirm_delete_doc": "Dieses generierte Dokument wirklich löschen?",
+    "add_row": "Zeile hinzufügen",
+    "remove_row": "Entfernen",
+    "table_empty": "Noch keine Einträge"
   },
   "documents": {
     "title": "Zielvorlagen",
@@ -196,7 +199,32 @@
     "import_default_name": "Importierter Fragebogen",
     "import_into": "Felder importieren",
     "import_into_btn": "Felder in Fragebogen importieren",
-    "import_into_target": "Ziel-Fragebogen"
+    "import_into_target": "Ziel-Fragebogen",
+    "table_columns": "Spalten",
+    "add_column": "Spalte hinzufügen",
+    "remove_column": "Entfernen",
+    "column_key": "Spalten-Schlüssel",
+    "column_label": "Spalten-Bezeichnung"
+  },
+  "matching": {
+    "title": "Platzhalter abgleichen",
+    "select_form": "Fragebogen auswählen",
+    "select_form_hint": "Fragebogen zum Abgleich auswählen",
+    "placeholder_col": "Vorlagen-Platzhalter",
+    "field_col": "Fragebogen-Feld",
+    "matched": "Zugeordnet",
+    "unmatched": "Nicht im Fragebogen",
+    "add_to_form": "Zum Fragebogen hinzufügen",
+    "adding_field": "Feld hinzufügen",
+    "field_label": "Bezeichnung",
+    "field_type": "Typ",
+    "field_hint": "Beschreibung (steuert KI-Extraktion)",
+    "save_field": "Feld hinzufügen",
+    "cancel": "Abbrechen",
+    "summary": "{matched} von {total} Platzhaltern zugeordnet",
+    "all_matched": "Alle Platzhalter sind im Fragebogen abgedeckt",
+    "no_forms": "Keine Fragebögen vorhanden. Erstellen Sie zuerst einen.",
+    "structural_group": "Strukturell (Block-/Zeilen-Markierungen)"
   },
   "settings": {
     "title": "Einstellungen",

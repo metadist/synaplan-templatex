@@ -140,7 +140,10 @@
     "download_doc": "Download",
     "generate_no_vars": "Fill the questionnaire or run AI extraction to populate variables for document generation.",
     "extract_hint": "Extracts structured profile data (career history, contact details) from the primary CV into template variables.",
-    "confirm_delete_doc": "Delete this generated document?"
+    "confirm_delete_doc": "Delete this generated document?",
+    "add_row": "Add Row",
+    "remove_row": "Remove",
+    "table_empty": "No rows yet"
   },
   "documents": {
     "title": "Document Templates",
@@ -196,7 +199,32 @@
     "import_default_name": "Imported Questionnaire",
     "import_into": "Import Fields",
     "import_into_btn": "Import Fields into Questionnaire",
-    "import_into_target": "Target questionnaire"
+    "import_into_target": "Target questionnaire",
+    "table_columns": "Columns",
+    "add_column": "Add Column",
+    "remove_column": "Remove",
+    "column_key": "Column Key",
+    "column_label": "Column Label"
+  },
+  "matching": {
+    "title": "Match Placeholders",
+    "select_form": "Select Questionnaire",
+    "select_form_hint": "Choose a questionnaire to match against",
+    "placeholder_col": "Template Placeholder",
+    "field_col": "Questionnaire Field",
+    "matched": "Matched",
+    "unmatched": "Not in Questionnaire",
+    "add_to_form": "Add to Questionnaire",
+    "adding_field": "Add Field",
+    "field_label": "Label",
+    "field_type": "Type",
+    "field_hint": "Description (guides AI extraction)",
+    "save_field": "Add Field",
+    "cancel": "Cancel",
+    "summary": "{matched} of {total} placeholders matched",
+    "all_matched": "All placeholders are covered by the questionnaire",
+    "no_forms": "No questionnaires available. Create one first.",
+    "structural_group": "Structural (block/row markers)"
   },
   "settings": {
     "title": "Settings",

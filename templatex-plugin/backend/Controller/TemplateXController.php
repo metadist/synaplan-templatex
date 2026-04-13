@@ -606,7 +606,7 @@ class TemplateXController extends AbstractController
                 if (empty($field['key'])) {
                     continue;
                 }
-                $validated[] = [
+                $fieldData = [
                     'key' => $field['key'],
                     'label' => $field['label'] ?? $field['key'],
                     'type' => $this->normalizeFieldType($field['type'] ?? 'text'),
@@ -616,6 +616,10 @@ class TemplateXController extends AbstractController
                     'hint' => $field['hint'] ?? null,
                     'options' => $field['options'] ?? null,
                 ];
+                if (($fieldData['type'] === 'table') && !empty($field['columns'])) {
+                    $fieldData['columns'] = $field['columns'];
+                }
+                $validated[] = $fieldData;
             }
 
             return $this->json([
@@ -930,7 +934,10 @@ class TemplateXController extends AbstractController
                 return $this->json(['success' => false, 'error' => 'Could not extract text from CV'], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
-            $prompt = $this->buildExtractionPrompt($rawText);
+            $form = $this->pluginData->get($userId, self::PLUGIN_NAME, self::DATA_TYPE_FORM, $entry['form_id'] ?? 'default');
+            $formFields = $form['fields'] ?? [];
+
+            $prompt = $this->buildExtractionPrompt($rawText, $formFields);
             $messages = [
                 ['role' => 'system', 'content' => 'You are a precise CV data extraction assistant. Return only valid JSON.'],
                 ['role' => 'user', 'content' => $prompt],
@@ -1033,15 +1040,21 @@ class TemplateXController extends AbstractController
         $fields = $form['fields'] ?? [];
         $fieldDescriptions = [];
         foreach ($fields as $field) {
-            $desc = $field['key'] . ' (' . ($field['type'] ?? 'text') . '): ' . ($field['label'] ?? $field['key']);
+            $type = $field['type'] ?? 'text';
+            $desc = $field['key'] . ' (' . $type . '): ' . ($field['label'] ?? $field['key']);
             if (!empty($field['hint'])) {
                 $desc .= ' — ' . $field['hint'];
             }
             if (!empty($field['options'])) {
                 $desc .= ' [allowed values: ' . implode(', ', $field['options']) . ']';
             }
-            if ($field['type'] === 'list') {
+            if ($type === 'list') {
                 $desc .= ' [return as JSON array of strings]';
+            }
+            if ($type === 'table') {
+                $columns = $field['columns'] ?? [];
+                $colKeys = array_map(fn ($c) => ($c['key'] ?? '') . ' (' . ($c['label'] ?? $c['key'] ?? '') . ')', $columns);
+                $desc .= ' — columns: ' . implode(', ', $colKeys) . '. [return as JSON array of objects with these column keys]';
             }
             $fieldDescriptions[] = $desc;
         }
@@ -1055,6 +1068,7 @@ class TemplateXController extends AbstractController
         For each field, extract the most appropriate value from the documents. Rules:
         - For "select" fields, ONLY return one of the allowed values listed in brackets, or null if not found.
         - For "list" fields, return a JSON array of strings (one entry per item).
+        - For "table" fields, return a JSON array of objects where each object has the column keys listed in the field description. Most recent entries first.
         - For "text" fields, return a plain string value.
         - For "checkbox" fields, return true or false.
         - For "date" fields, return in YYYY-MM-DD format.
@@ -1121,10 +1135,12 @@ class TemplateXController extends AbstractController
         $formFields = $form['fields'] ?? [];
         $resolved = $this->resolveVariables($entry, $formFields);
 
+        $tableFieldMeta = $this->getTableFieldMeta($formFields);
+
         return $this->json([
             'success' => true,
             'variables' => $resolved['variables'],
-            'station_count' => $resolved['station_count'],
+            'table_fields' => $tableFieldMeta,
             'sources' => $this->getVariableSources($formFields),
         ]);
     }
@@ -1160,7 +1176,7 @@ class TemplateXController extends AbstractController
         return $this->json([
             'success' => true,
             'variables' => $resolved['variables'],
-            'station_count' => $resolved['station_count'],
+            'table_fields' => $this->getTableFieldMeta($formFields),
         ]);
     }
 
@@ -1202,14 +1218,8 @@ class TemplateXController extends AbstractController
             $formFields = $form['fields'] ?? [];
             $resolved = $this->resolveVariables($entry, $formFields);
             $variables = $resolved['variables'];
-            $stationCount = $resolved['station_count'];
 
-            $stations = $entry['ai_extracted']['stations'] ?? [];
-            if (isset($entry['variable_overrides']['stations']) && is_array($entry['variable_overrides']['stations'])) {
-                $stations = $entry['variable_overrides']['stations'];
-            }
-
-            $arrays = $this->collectArrayData($entry, $stations);
+            $arrays = $this->collectArrayData($entry, $formFields);
 
             $cleanedPath = $this->cleanTemplateMacros($templatePath);
 
@@ -1573,29 +1583,68 @@ class TemplateXController extends AbstractController
         $this->pluginData->set($userId, self::PLUGIN_NAME, self::DATA_TYPE_FORM, 'default', $defaultForm);
     }
 
-    private function buildExtractionPrompt(string $rawText): string
+    private function buildExtractionPrompt(string $rawText, array $formFields = []): string
     {
+        $fieldLines = [];
+
+        $defaultScalars = [
+            'firstname' => 'First name / given name',
+            'lastname' => 'Last name / family name / surname',
+            'fullname' => 'Full name (firstname + lastname combined)',
+            'address1' => 'Street and house number',
+            'address2' => 'City',
+            'zip' => 'Postal code',
+            'birthdate' => 'Date of birth (DD.MM.YYYY format)',
+            'number' => 'Phone number',
+            'email' => 'Email address',
+            'currentposition' => 'Current/most recent job title',
+            'education' => 'Education and degrees',
+            'languageslist' => '(array of strings): Language skills',
+            'otherskillslist' => '(array of strings): Other skills (IT, tools)',
+        ];
+
+        $coveredKeys = [];
+
+        foreach ($formFields as $field) {
+            $key = $field['key'] ?? '';
+            if ($key === '') {
+                continue;
+            }
+            $coveredKeys[$key] = true;
+            $label = $field['label'] ?? $key;
+            $hint = !empty($field['hint']) ? ' — ' . $field['hint'] : '';
+
+            if (($field['type'] ?? 'text') === 'table') {
+                $columns = $field['columns'] ?? [];
+                if (empty($columns)) {
+                    continue;
+                }
+                $colDescs = [];
+                foreach ($columns as $col) {
+                    $colDescs[] = ($col['key'] ?? '') . ' (string): ' . ($col['label'] ?? $col['key'] ?? '');
+                }
+                $colBlock = implode("\n              ", $colDescs);
+                $fieldLines[] = "- {$key} (array of objects): {$label}{$hint}. Most recent first. Each entry:\n              {$colBlock}";
+            } elseif (($field['type'] ?? 'text') === 'list') {
+                $fieldLines[] = "- {$key} (array of strings): {$label}{$hint}";
+            } else {
+                $fieldLines[] = "- {$key} (string): {$label}{$hint}";
+            }
+        }
+
+        foreach ($defaultScalars as $key => $desc) {
+            if (!isset($coveredKeys[$key])) {
+                $fieldLines[] = "- {$key} {$desc}";
+            }
+        }
+
+        $fieldsBlock = implode("\n            ", $fieldLines);
+
         return <<<PROMPT
             You are extracting structured data from a CV/resume document. Return a JSON object with these fields. Use null for any field not found in the document. Do NOT invent or guess data.
 
             Fields to extract:
-            - firstname (string): First name / given name
-            - lastname (string): Last name / family name / surname
-            - fullname (string): Full name (firstname + lastname combined)
-            - address1 (string): Street and house number
-            - address2 (string): City
-            - zip (string): Postal code
-            - birthdate (string): Date of birth (DD.MM.YYYY format)
-            - number (string): Phone number
-            - email (string): Email address
-            - currentposition (string): Current/most recent job title
-            - education (string): Education and degrees
-            - languageslist (array of strings): Language skills
-            - otherskillslist (array of strings): Other skills (IT, tools)
-            - stations (array of objects): Career history, most recent first. Each station:
-              - employer (string): Company name
-              - time (string): Time range, e.g. "02/2021 – heute"
-              - details (string): Full details with sub-positions, bullet points, achievements. Preserve original formatting and line breaks.
+            {$fieldsBlock}
 
             Return ONLY valid JSON, no explanation.
 
@@ -1664,8 +1713,8 @@ class TemplateXController extends AbstractController
 
         IMPORTANT skip rules:
         - SKIP any {{checkb.*}} placeholders (checkbox derivatives are auto-generated)
-        - SKIP any {{stations.*}} placeholders (career stations are handled separately by the system)
-        - If multiple related checkb/stations entries appear, ignore them all
+        - SKIP any {{groupname.field}} placeholders where groupname.field represents table row data (these are handled separately as table fields)
+        - SKIP any {{#blockname}} / {{/blockname}} block markers
 
         Special handling:
         - If description says "Weglassen wenn nicht relevant" or similar -> add hint "Leave empty if not relevant"
@@ -1738,9 +1787,24 @@ class TemplateXController extends AbstractController
 
     private function normalizeFieldType(string $type): string
     {
-        $valid = ['text', 'textarea', 'select', 'list', 'date', 'number', 'checkbox'];
+        $valid = ['text', 'textarea', 'select', 'list', 'date', 'number', 'checkbox', 'table'];
 
         return in_array($type, $valid, true) ? $type : 'text';
+    }
+
+    private function getTableFieldMeta(array $formFields): object
+    {
+        $meta = [];
+        foreach ($formFields as $field) {
+            if (($field['type'] ?? '') === 'table' && !empty($field['key'])) {
+                $meta[$field['key']] = [
+                    'label' => $field['label'] ?? $field['key'],
+                    'columns' => $field['columns'] ?? [],
+                ];
+            }
+        }
+
+        return (object) $meta;
     }
 
     private function normalizeSource(?string $source): ?string
@@ -1784,7 +1848,7 @@ class TemplateXController extends AbstractController
         return $sources;
     }
 
-    /** @return array{variables: array<string, mixed>, station_count: int} */
+    /** @return array{variables: array<string, mixed>} */
     private function resolveVariables(array $entry, ?array $formFields = null): array
     {
         $formData = $entry['field_values'] ?? [];
@@ -1828,37 +1892,42 @@ class TemplateXController extends AbstractController
             $variables['workinghours'] = null;
         }
 
-        $movingYes = strtolower((string) ($variables['moving'] ?? '')) === 'ja';
-        $variables['checkb.moving.yes'] = $movingYes;
-        $variables['checkb.moving.no'] = !$movingYes;
-
-        $commuteVal = $formData['commute'] ?? $variables['travelorcommute'] ?? '';
-        $commuteYes = strtolower((string) $commuteVal) === 'ja';
-        $variables['checkb.commute.yes'] = $commuteYes;
-        $variables['checkb.commute.no'] = !$commuteYes;
-
-        $travelVal = $formData['travel'] ?? $variables['travelorcommute'] ?? '';
-        $travelYes = strtolower((string) $travelVal) === 'ja';
-        $variables['checkb.travel.yes'] = $travelYes;
-        $variables['checkb.travel.no'] = !$travelYes;
-
-        $stations = $aiData['stations'] ?? [];
-        if (array_key_exists('stations', $overrides) && is_array($overrides['stations'])) {
-            $stations = $overrides['stations'];
+        // Auto-generate checkbox variables from form fields with type=checkbox
+        $checkboxKeys = [];
+        foreach (($formFields ?? []) as $field) {
+            if (($field['type'] ?? '') === 'checkbox' && !empty($field['key'])) {
+                $checkboxKeys[] = $field['key'];
+            }
         }
-        $stationCount = count($stations);
+        // Backward compat: always include these three if present
+        foreach (['moving', 'commute', 'travel'] as $legacyKey) {
+            if (isset($variables[$legacyKey]) && !in_array($legacyKey, $checkboxKeys, true)) {
+                $checkboxKeys[] = $legacyKey;
+            }
+        }
+        foreach ($checkboxKeys as $cbKey) {
+            $cbYes = strtolower((string) ($variables[$cbKey] ?? '')) === 'ja'
+                || ($variables[$cbKey] === true);
+            $variables['checkb.' . $cbKey . '.yes'] = $cbYes;
+            $variables['checkb.' . $cbKey . '.no'] = !$cbYes;
+        }
 
-        for ($i = 0; $i < $stationCount; $i++) {
-            $num = $i + 1;
-            $station = $stations[$i] ?? [];
-            $variables['stations.time.' . $num] = $station['time'] ?? '';
-            $variables['stations.employer.' . $num] = $station['employer'] ?? '';
-            $variables['stations.details.' . $num] = $station['details'] ?? '';
+        // Backward compat: travelorcommute → commute/travel checkboxes
+        if (!isset($variables['commute']) && isset($variables['travelorcommute'])) {
+            $commuteVal = $formData['commute'] ?? $variables['travelorcommute'] ?? '';
+            $commuteYes = strtolower((string) $commuteVal) === 'ja';
+            $variables['checkb.commute.yes'] = $commuteYes;
+            $variables['checkb.commute.no'] = !$commuteYes;
+        }
+        if (!isset($variables['travel']) && isset($variables['travelorcommute'])) {
+            $travelVal = $formData['travel'] ?? $variables['travelorcommute'] ?? '';
+            $travelYes = strtolower((string) $travelVal) === 'ja';
+            $variables['checkb.travel.yes'] = $travelYes;
+            $variables['checkb.travel.no'] = !$travelYes;
         }
 
         return [
             'variables' => $variables,
-            'station_count' => $stationCount,
         ];
     }
 
@@ -1889,26 +1958,56 @@ class TemplateXController extends AbstractController
      *
      * @return array<string, array<int, array<string, string>|string>>
      */
-    private function collectArrayData(array $entry, array $stations): array
+    private function collectArrayData(array $entry, array $formFields): array
     {
         $arrays = [];
-
-        if (!empty($stations)) {
-            $arrays['stations'] = $stations;
-        }
-
         $formData = $entry['field_values'] ?? [];
         $aiData = $entry['ai_extracted'] ?? [];
         $overrides = $entry['variable_overrides'] ?? [];
 
-        $listCandidates = [
-            'relevantposlist', 'relevantfortargetposlist',
-            'languageslist', 'otherskillslist', 'benefits',
-        ];
-        foreach ($listCandidates as $key) {
+        $scannedKeys = [];
+        foreach ($formFields as $field) {
+            $key = $field['key'] ?? '';
+            $type = $field['type'] ?? 'text';
+            if ($key === '' || ($type !== 'table' && $type !== 'list')) {
+                continue;
+            }
+            $scannedKeys[$key] = true;
+            $primarySource = $field['source'] ?? 'form';
+            $fallbackSource = $field['fallback'] ?? null;
+
+            $val = $overrides[$key] ?? null;
+            if ($val === null) {
+                $val = $primarySource === 'ai' ? ($aiData[$key] ?? null) : ($formData[$key] ?? null);
+            }
+            if ($val === null && $fallbackSource !== null) {
+                $val = $fallbackSource === 'ai' ? ($aiData[$key] ?? null) : ($formData[$key] ?? null);
+            }
+            if (is_array($val) && !empty($val)) {
+                $arrays[$key] = $val;
+            }
+        }
+
+        // Backward compat: pick up hardcoded list keys from DEFAULT_VARIABLE_SOURCES
+        $legacyListKeys = ['relevantposlist', 'relevantfortargetposlist', 'languageslist', 'otherskillslist', 'benefits'];
+        foreach ($legacyListKeys as $key) {
+            if (isset($scannedKeys[$key])) {
+                continue;
+            }
             $val = $overrides[$key] ?? $formData[$key] ?? $aiData[$key] ?? null;
             if (is_array($val) && !empty($val)) {
                 $arrays[$key] = $val;
+            }
+        }
+
+        // Backward compat: pick up legacy 'stations' from ai_extracted if not covered by a form table field
+        if (!isset($scannedKeys['stations']) && !isset($arrays['stations'])) {
+            $stations = $aiData['stations'] ?? [];
+            if (array_key_exists('stations', $overrides) && is_array($overrides['stations'])) {
+                $stations = $overrides['stations'];
+            }
+            if (!empty($stations)) {
+                $arrays['stations'] = $stations;
             }
         }
 

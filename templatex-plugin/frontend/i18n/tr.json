@@ -140,7 +140,10 @@
     "download_doc": "İndir",
     "generate_no_vars": "Belge oluşturma değişkenlerini doldurmak için anketi doldurun veya yapay zeka çıkartmasını çalıştırın.",
     "extract_hint": "Birincil özgeçmişten yapılandırılmış profil verilerini (kariyer geçmişi, iletişim bilgileri) şablon değişkenlerine çıkartır.",
-    "confirm_delete_doc": "Bu oluşturulan belge silinsin mi?"
+    "confirm_delete_doc": "Bu oluşturulan belge silinsin mi?",
+    "add_row": "Satır ekle",
+    "remove_row": "Kaldır",
+    "table_empty": "Henüz satır yok"
   },
   "documents": {
     "title": "Belge Şablonları",
@@ -196,7 +199,32 @@
     "import_default_name": "İçe Aktarılan Anket",
     "import_into": "Alanları İçe Aktar",
     "import_into_btn": "Alanları Ankete Aktar",
-    "import_into_target": "Hedef anket"
+    "import_into_target": "Hedef anket",
+    "table_columns": "Sütunlar",
+    "add_column": "Sütun ekle",
+    "remove_column": "Kaldır",
+    "column_key": "Sütun anahtarı",
+    "column_label": "Sütun etiketi"
+  },
+  "matching": {
+    "title": "Yer tutucuları eşle",
+    "select_form": "Anket seçin",
+    "select_form_hint": "Karşılaştırmak için bir anket seçin",
+    "placeholder_col": "Şablon yer tutucusu",
+    "field_col": "Anket alanı",
+    "matched": "Eşleşti",
+    "unmatched": "Ankette yok",
+    "add_to_form": "Ankete ekle",
+    "adding_field": "Alan ekle",
+    "field_label": "Etiket",
+    "field_type": "Tür",
+    "field_hint": "Açıklama (yapay zeka çıkarımını yönlendirir)",
+    "save_field": "Alan ekle",
+    "cancel": "İptal",
+    "summary": "{total} yer tutucudan {matched} tanesi eşleşti",
+    "all_matched": "Tüm yer tutucular anket tarafından karşılanıyor",
+    "no_forms": "Anket mevcut değil. Önce bir tane oluşturun.",
+    "structural_group": "Yapısal (blok/satır işaretçileri)"
   },
   "settings": {
     "title": "Ayarlar",
