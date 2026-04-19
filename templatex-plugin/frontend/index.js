@@ -718,7 +718,9 @@ export default {
 
     function isStructuralPlaceholder(ph) {
       const k = (ph.key || ph.name || "").trim();
-      return ph.type === "block_marker" || k.startsWith("#") || k.startsWith("/");
+      return (
+        ph.type === "block_marker" || k.startsWith("#") || k.startsWith("/")
+      );
     }
 
     function inferFieldType(ph) {
@@ -769,7 +771,7 @@ export default {
       if (mf) {
         // Build a map of table field keys → column keys for matching
         const tableFieldMap = {};
-        for (const f of (mf.fields || [])) {
+        for (const f of mf.fields || []) {
           if (f.type === "table" && f.columns) {
             const colKeys = {};
             for (const c of f.columns) colKeys[c.key] = c;
@@ -839,7 +841,15 @@ export default {
             }
 
             if (isAdding) {
-              const typeOpts = ["text", "textarea", "select", "list", "date", "number", "checkbox"]
+              const typeOpts = [
+                "text",
+                "textarea",
+                "select",
+                "list",
+                "date",
+                "number",
+                "checkbox",
+              ]
                 .map(
                   (tp) =>
                     `<option value="${tp}"${tp === inferFieldType(ph) ? " selected" : ""}>${tp}</option>`,
@@ -891,7 +901,9 @@ export default {
           : T("matching.summary")
               .replace("{matched}", matchedCount)
               .replace("{total}", totalMatchable);
-        const summaryColor = allMatched ? "var(--status-success)" : "var(--txt-secondary)";
+        const summaryColor = allMatched
+          ? "var(--status-success)"
+          : "var(--txt-secondary)";
 
         const structuralPhs = phs.filter((p) => isStructuralPlaceholder(p));
         const structuralHtml =
@@ -1572,9 +1584,10 @@ export default {
           .join("");
       }
 
-      const reorderToggle = fields.length > 1
-        ? `<button data-action="toggle-reorder-fields" class="ml-auto text-xs tx-link flex items-center gap-1" title="${T("records.reorder_fields")}">${ICONS.grip} ${isReordering ? T("records.reorder_done") : T("records.reorder_fields")}</button>`
-        : "";
+      const reorderToggle =
+        fields.length > 1
+          ? `<button data-action="toggle-reorder-fields" class="ml-auto text-xs tx-link flex items-center gap-1" title="${T("records.reorder_fields")}">${ICONS.grip} ${isReordering ? T("records.reorder_done") : T("records.reorder_fields")}</button>`
+          : "";
 
       return `<div class="tx-card p-6">
         <h4 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3 flex items-center gap-2">${ICONS.clipboard} ${T("records.section_data")}${reorderToggle}</h4>
@@ -1608,7 +1621,7 @@ export default {
       if (field.type === "checkbox") {
         return `<div class="${spanClass}">
           <label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" id="${fid}" name="${escHtml(field.key)}" ${(value === true || value === "true" || value === "Ja") ? "checked" : ""} class="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 h-4 w-4" />
+            <input type="checkbox" id="${fid}" name="${escHtml(field.key)}" ${value === true || value === "true" || value === "Ja" ? "checked" : ""} class="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 h-4 w-4" />
             <span class="text-sm font-medium">${escHtml(field.label || field.key)}${reqMark}</span>
           </label>${hint}
         </div>`;
@@ -1651,7 +1664,10 @@ export default {
           const cols = field.columns || [];
           const rows = Array.isArray(value) ? value : [];
           const headerCells = cols
-            .map((c) => `<th class="py-1.5 px-2 text-xs tx-secondary font-medium">${escHtml(c.label || c.key)}</th>`)
+            .map(
+              (c) =>
+                `<th class="py-1.5 px-2 text-xs tx-secondary font-medium">${escHtml(c.label || c.key)}</th>`,
+            )
             .join("");
           const dataRows = rows
             .map(
@@ -1661,10 +1677,15 @@ export default {
                     (c) =>
                       `<td class="py-1 px-1"><input name="${escHtml(field.key)}__${ri}__${escHtml(c.key)}" value="${escHtml(String(row[c.key] ?? ""))}" class="tx-input text-xs" style="padding:.25rem .375rem" /></td>`,
                   )
-                  .join("")}<td class="py-1 px-1 text-center"><button type="button" data-action="remove-table-row" data-field-key="${escHtml(field.key)}" data-row-idx="${ri}" class="p-0.5 transition-colors" style="color:var(--txt-secondary)">${ICONS.trash}</button></td></tr>`,
+                  .join(
+                    "",
+                  )}<td class="py-1 px-1 text-center"><button type="button" data-action="remove-table-row" data-field-key="${escHtml(field.key)}" data-row-idx="${ri}" class="p-0.5 transition-colors" style="color:var(--txt-secondary)">${ICONS.trash}</button></td></tr>`,
             )
             .join("");
-          const emptyMsg = rows.length === 0 ? `<tr><td colspan="${cols.length + 1}" class="py-3 text-center text-xs tx-secondary">${T("records.table_empty")}</td></tr>` : "";
+          const emptyMsg =
+            rows.length === 0
+              ? `<tr><td colspan="${cols.length + 1}" class="py-3 text-center text-xs tx-secondary">${T("records.table_empty")}</td></tr>`
+              : "";
           input = `<div class="overflow-x-auto rounded" style="border:1px solid var(--divider)">
             <table class="w-full text-left">
               <thead><tr class="tx-divider border-b">${headerCells}<th class="py-1.5 px-2" style="width:2rem"></th></tr></thead>
@@ -1690,21 +1711,36 @@ export default {
       const cvInfo = hasCv ? entry.files.cv : null;
       const allFiles = [];
       if (cvInfo) allFiles.push({ ...cvInfo, slot: "cv", slotIndex: 0 });
-      for (let i = 0; i < additionalDocs.length; i++) allFiles.push({ ...additionalDocs[i], slot: "additional", slotIndex: i });
+      for (let i = 0; i < additionalDocs.length; i++)
+        allFiles.push({
+          ...additionalDocs[i],
+          slot: "additional",
+          slotIndex: i,
+        });
       const hasAnyFile = allFiles.length > 0;
 
-      const fileListHtml = allFiles.length > 0
-        ? allFiles.map((f) => `<div class="flex items-center gap-2 py-1.5 group">
+      const fileListHtml =
+        allFiles.length > 0
+          ? allFiles
+              .map(
+                (f) => `<div class="flex items-center gap-2 py-1.5 group">
             <span style="color:var(--status-success)">${ICONS.check}</span>
             <span class="text-xs flex-1 truncate">${escHtml(f.filename)}</span>
             <span class="text-xs tx-secondary">${f.size ? (f.size / 1024 > 1024 ? (f.size / 1048576).toFixed(1) + " MB" : Math.round(f.size / 1024) + " KB") : ""}</span>
             <button data-action="delete-source-file" data-slot="${escHtml(f.slot)}" data-slot-index="${f.slotIndex}" class="p-1 rounded transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100" style="color:var(--txt-secondary)" title="${T("app.delete")}">${ICONS.trash}</button>
-          </div>`).join("")
-        : `<p class="text-xs tx-secondary py-2">${T("records.no_files")}</p>`;
+          </div>`,
+              )
+              .join("")
+          : `<p class="text-xs tx-secondary py-2">${T("records.no_files")}</p>`;
 
       let progressHtml = "";
       if (state.parsing) {
-        const steps = [T("records.analyze_step_upload"), T("records.analyze_step_ocr"), T("records.analyze_step_ai"), T("records.analyze_step_done")];
+        const steps = [
+          T("records.analyze_step_upload"),
+          T("records.analyze_step_ocr"),
+          T("records.analyze_step_ai"),
+          T("records.analyze_step_done"),
+        ];
         const step = state.parseStep || 0;
         const pct = Math.min(95, 15 + step * 28);
         progressHtml = `<div class="mt-3 space-y-2">
@@ -1731,9 +1767,13 @@ export default {
             ${ICONS.upload} ${hasAnyFile ? T("records.upload_more") : T("records.upload_doc")}
             <input type="file" id="tx-doc-upload-unified" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.tiff,.tif,.bmp,.txt,.rtf,.odt,.xls,.xlsx,.pptx" multiple class="hidden" />
           </label>
-          ${hasAnyFile && !state.parsing ? `<button data-action="parse-documents" class="tx-btn tx-btn-sm flex items-center gap-1.5">
+          ${
+            hasAnyFile && !state.parsing
+              ? `<button data-action="parse-documents" class="tx-btn tx-btn-sm flex items-center gap-1.5">
             ${ICONS.sparkle} ${T("records.parse_btn")}
-          </button>` : ""}
+          </button>`
+              : ""
+          }
         </div>
         ${hasAnyFile && !state.parsing ? `<p class="text-xs tx-secondary mt-1.5">${T("records.parse_hint")}</p>` : ""}
         ${progressHtml}
@@ -1798,9 +1838,7 @@ export default {
       const regularVars = vars.filter((v) => v.type !== "table");
       const tableVars = vars.filter((v) => v.type === "table");
       const rows = regularVars.map((v) => renderVariableRow(v, e.id)).join("");
-      const tableRows = tableVars
-        .map((v) => renderTableGroup(v))
-        .join("");
+      const tableRows = tableVars.map((v) => renderTableGroup(v)).join("");
       return `<div class="tx-card p-6">
         <h4 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3 flex items-center gap-2">${ICONS.clipboard} ${T("records.section_variables")}</h4>
         <div class="overflow-x-auto">
@@ -1876,22 +1914,35 @@ export default {
       const tableRows = Array.isArray(v.value) ? v.value : [];
       if (tableRows.length === 0) return "";
       const cols = v.columns || [];
-      const colLabels = cols.length > 0 ? cols : Object.keys(tableRows[0] || {}).map((k) => ({ key: k, label: k }));
+      const colLabels =
+        cols.length > 0
+          ? cols
+          : Object.keys(tableRows[0] || {}).map((k) => ({ key: k, label: k }));
 
       const headerCells = colLabels
-        .map((c) => `<th class="py-1.5 px-2 text-xs tx-secondary font-medium">${escHtml(c.label || c.key)}</th>`)
+        .map(
+          (c) =>
+            `<th class="py-1.5 px-2 text-xs tx-secondary font-medium">${escHtml(c.label || c.key)}</th>`,
+        )
         .join("");
       const bodyRows = tableRows
         .map(
           (row) =>
             `<tr class="tx-divider border-t">${colLabels
-              .map((c) => `<td class="py-1.5 px-2 text-xs">${escHtml(String(row[c.key] ?? ""))}</td>`)
+              .map(
+                (c) =>
+                  `<td class="py-1.5 px-2 text-xs">${escHtml(String(row[c.key] ?? ""))}</td>`,
+              )
               .join("")}</tr>`,
         )
         .join("");
 
       const srcLabel =
-        v.source === "ai" ? T("records.source_ai") : v.source === "override" ? T("records.source_override") : T("records.source_form");
+        v.source === "ai"
+          ? T("records.source_ai")
+          : v.source === "override"
+            ? T("records.source_override")
+            : T("records.source_form");
       return `<div class="mt-4">
         <button data-action="toggle-station" data-station-key="${escHtml(v.key)}" class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
           <span class="tx-station-chevron" data-key="${escHtml(v.key)}">${ICONS.chevDown}</span>
@@ -2044,26 +2095,40 @@ export default {
       const formEl = el.querySelector("#tx-form-editor");
       if (!formEl || !state.editingForm) return;
       const fd = new FormData(formEl);
-      state.editingForm.name = fd.get("form_name")?.toString().trim() || state.editingForm.name;
-      state.editingForm.language = fd.get("form_language")?.toString() || state.editingForm.language;
+      state.editingForm.name =
+        fd.get("form_name")?.toString().trim() || state.editingForm.name;
+      state.editingForm.language =
+        fd.get("form_language")?.toString() || state.editingForm.language;
       const fields = state.editingForm.fields || [];
       for (let idx = 0; idx < fields.length; idx++) {
         if (fd.has(`fk_${idx}`)) {
-          fields[idx].key = fd.get(`fk_${idx}`)?.toString().trim() || fields[idx].key;
-          fields[idx].label = fd.get(`fl_${idx}`)?.toString().trim() || fields[idx].label;
-          fields[idx].type = fd.get(`ft_${idx}`)?.toString() || fields[idx].type;
+          fields[idx].key =
+            fd.get(`fk_${idx}`)?.toString().trim() || fields[idx].key;
+          fields[idx].label =
+            fd.get(`fl_${idx}`)?.toString().trim() || fields[idx].label;
+          fields[idx].type =
+            fd.get(`ft_${idx}`)?.toString() || fields[idx].type;
           fields[idx].required = fd.has(`fr_${idx}`);
           fields[idx].hint = fd.get(`fh_${idx}`)?.toString().trim() || "";
           if (fields[idx].type === "select") {
             const optRaw = fd.get(`fo_${idx}`)?.toString().trim() || "";
-            fields[idx].options = optRaw ? optRaw.split(",").map((o) => o.trim()).filter(Boolean) : [];
+            fields[idx].options = optRaw
+              ? optRaw
+                  .split(",")
+                  .map((o) => o.trim())
+                  .filter(Boolean)
+              : [];
           }
           if (fields[idx].type === "table") {
             const cols = fields[idx].columns || [];
             for (let ci = 0; ci < cols.length; ci++) {
               if (fd.has(`fc_${idx}_ck_${ci}`)) {
-                cols[ci].key = fd.get(`fc_${idx}_ck_${ci}`)?.toString().trim() || cols[ci].key;
-                cols[ci].label = fd.get(`fc_${idx}_cl_${ci}`)?.toString().trim() || cols[ci].label;
+                cols[ci].key =
+                  fd.get(`fc_${idx}_ck_${ci}`)?.toString().trim() ||
+                  cols[ci].key;
+                cols[ci].label =
+                  fd.get(`fc_${idx}_cl_${ci}`)?.toString().trim() ||
+                  cols[ci].label;
               }
             }
           }
@@ -2447,7 +2512,8 @@ export default {
                 let ci = 0;
                 while (fd.has(`fc_${idx}_ck_${ci}`)) {
                   const ck = fd.get(`fc_${idx}_ck_${ci}`)?.toString().trim();
-                  const cl = fd.get(`fc_${idx}_cl_${ci}`)?.toString().trim() || ck;
+                  const cl =
+                    fd.get(`fc_${idx}_cl_${ci}`)?.toString().trim() || ck;
                   if (ck) columns.push({ key: ck, label: cl });
                   ci++;
                 }
@@ -2639,10 +2705,16 @@ export default {
               const cols = field.columns || [];
               const rows = [];
               let ri = 0;
-              while (entryDataForm.querySelector(`[name="${field.key}__${ri}__${cols[0]?.key}"]`)) {
+              while (
+                entryDataForm.querySelector(
+                  `[name="${field.key}__${ri}__${cols[0]?.key}"]`,
+                )
+              ) {
                 const row = {};
                 for (const col of cols) {
-                  const cell = entryDataForm.querySelector(`[name="${field.key}__${ri}__${col.key}"]`);
+                  const cell = entryDataForm.querySelector(
+                    `[name="${field.key}__${ri}__${col.key}"]`,
+                  );
                   row[col.key] = cell?.value ?? "";
                 }
                 rows.push(row);
@@ -2691,7 +2763,8 @@ export default {
           const entry = state.selectedEntry;
           if (!entry) return;
           if (!entry.field_values) entry.field_values = {};
-          if (!Array.isArray(entry.field_values[fieldKey])) entry.field_values[fieldKey] = [];
+          if (!Array.isArray(entry.field_values[fieldKey]))
+            entry.field_values[fieldKey] = [];
           entry.field_values[fieldKey].push({});
           render();
         }),
@@ -2755,69 +2828,68 @@ export default {
       );
 
       // --- Entry detail: delete source file ---
-      el.querySelectorAll('[data-action="delete-source-file"]').forEach(
-        (btn) =>
-          btn.addEventListener("click", async () => {
-            if (!confirm(T("records.confirm_delete_source_file"))) return;
-            const entry = state.selectedEntry;
-            if (!entry) return;
-            const slot = btn.dataset.slot;
-            const slotIndex = btn.dataset.slotIndex;
-            try {
-              const d = await api(
-                `/candidates/${entry.id}/files/${slot}/${slotIndex}`,
-                { method: "DELETE" },
-              );
-              state.selectedEntry = d.candidate;
-              showToast(T("records.source_file_deleted"));
-              render();
-            } catch (err) {
-              showToast(err.message, "error");
-            }
-          }),
+      el.querySelectorAll('[data-action="delete-source-file"]').forEach((btn) =>
+        btn.addEventListener("click", async () => {
+          if (!confirm(T("records.confirm_delete_source_file"))) return;
+          const entry = state.selectedEntry;
+          if (!entry) return;
+          const slot = btn.dataset.slot;
+          const slotIndex = btn.dataset.slotIndex;
+          try {
+            const d = await api(
+              `/candidates/${entry.id}/files/${slot}/${slotIndex}`,
+              { method: "DELETE" },
+            );
+            state.selectedEntry = d.candidate;
+            showToast(T("records.source_file_deleted"));
+            render();
+          } catch (err) {
+            showToast(err.message, "error");
+          }
+        }),
       );
 
       // --- Entry detail: toggle field reordering ---
-      el.querySelector('[data-action="toggle-reorder-fields"]')?.addEventListener(
-        "click",
-        async () => {
-          if (state.reorderingFields) {
-            const entry = state.selectedEntry;
-            const formDef = state.forms.find((f) => f.id === entry?.form_id);
-            if (formDef) {
-              try {
-                await api(`/forms/${formDef.id}`, {
-                  method: "PUT",
-                  body: JSON.stringify({ fields: formDef.fields }),
-                });
-                showToast(T("records.reorder_saved"));
-              } catch (err) {
-                showToast(err.message, "error");
-              }
+      el.querySelector(
+        '[data-action="toggle-reorder-fields"]',
+      )?.addEventListener("click", async () => {
+        if (state.reorderingFields) {
+          const entry = state.selectedEntry;
+          const formDef = state.forms.find((f) => f.id === entry?.form_id);
+          if (formDef) {
+            try {
+              await api(`/forms/${formDef.id}`, {
+                method: "PUT",
+                body: JSON.stringify({ fields: formDef.fields }),
+              });
+              showToast(T("records.reorder_saved"));
+            } catch (err) {
+              showToast(err.message, "error");
             }
           }
-          state.reorderingFields = !state.reorderingFields;
-          render();
-        },
-      );
+        }
+        state.reorderingFields = !state.reorderingFields;
+        render();
+      });
 
       // --- Entry detail: move field up/down ---
-      el.querySelectorAll('[data-action="move-field-up"], [data-action="move-field-down"]').forEach(
-        (btn) =>
-          btn.addEventListener("click", () => {
-            const entry = state.selectedEntry;
-            if (!entry) return;
-            const formDef = state.forms.find((f) => f.id === entry.form_id);
-            if (!formDef?.fields) return;
-            const idx = parseInt(btn.dataset.fieldIdx);
-            const direction = btn.dataset.action === "move-field-up" ? -1 : 1;
-            const newIdx = idx + direction;
-            if (newIdx < 0 || newIdx >= formDef.fields.length) return;
-            const tmp = formDef.fields[idx];
-            formDef.fields[idx] = formDef.fields[newIdx];
-            formDef.fields[newIdx] = tmp;
-            render();
-          }),
+      el.querySelectorAll(
+        '[data-action="move-field-up"], [data-action="move-field-down"]',
+      ).forEach((btn) =>
+        btn.addEventListener("click", () => {
+          const entry = state.selectedEntry;
+          if (!entry) return;
+          const formDef = state.forms.find((f) => f.id === entry.form_id);
+          if (!formDef?.fields) return;
+          const idx = parseInt(btn.dataset.fieldIdx);
+          const direction = btn.dataset.action === "move-field-up" ? -1 : 1;
+          const newIdx = idx + direction;
+          if (newIdx < 0 || newIdx >= formDef.fields.length) return;
+          const tmp = formDef.fields[idx];
+          formDef.fields[idx] = formDef.fields[newIdx];
+          formDef.fields[newIdx] = tmp;
+          render();
+        }),
       );
 
       // --- Entry detail: generate template selector ---
@@ -2935,7 +3007,8 @@ export default {
           if (state.forms.length === 0) await fetchForms();
           render();
           const matchCard = el.querySelector("#tx-matching-form-select");
-          if (matchCard) matchCard.scrollIntoView({ behavior: "smooth", block: "center" });
+          if (matchCard)
+            matchCard.scrollIntoView({ behavior: "smooth", block: "center" });
         },
       );
 
@@ -2998,12 +3071,25 @@ export default {
           const container = el.querySelector(`[data-add-form-key="${key}"]`);
           if (!container || !state.matchingForm) return;
 
-          const label = container.querySelector('[name="add_label"]')?.value?.trim() || key;
-          const type = container.querySelector('[name="add_type"]')?.value || "text";
-          const hint = container.querySelector('[name="add_hint"]')?.value?.trim() || "";
+          const label =
+            container.querySelector('[name="add_label"]')?.value?.trim() || key;
+          const type =
+            container.querySelector('[name="add_type"]')?.value || "text";
+          const hint =
+            container.querySelector('[name="add_hint"]')?.value?.trim() || "";
 
-          const newField = { key, label, type, required: false, source: "ai", hint };
-          const updatedFields = [...(state.matchingForm.fields || []), newField];
+          const newField = {
+            key,
+            label,
+            type,
+            required: false,
+            source: "ai",
+            hint,
+          };
+          const updatedFields = [
+            ...(state.matchingForm.fields || []),
+            newField,
+          ];
 
           try {
             const d = await api(`/forms/${state.matchingFormId}`, {
