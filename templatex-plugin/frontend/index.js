@@ -1328,17 +1328,15 @@ export default {
         ? pageItems
             .map(
               (d) =>
-                `<div class="tx-row p-4" data-open-dataset="${d.id}">
-                  <div class="flex items-center justify-between gap-3 cursor-pointer">
-                    <div class="min-w-0 flex-1">
-                      <div class="font-medium truncate">${escHtml(datasetDisplayName(d))}</div>
-                      <div class="text-xs tx-secondary mt-0.5">${formatDate(d.created_at)}</div>
-                    </div>
-                    <div class="flex items-center gap-3">
-                      ${statusBadge(d.status || "draft")}
-                      <span class="text-xs ${datasetHasDoc(d) ? "text-green-600 dark:text-green-400" : "tx-secondary"}">${datasetHasDoc(d) ? T("datasets.doc_uploaded") : T("datasets.doc_missing")}</span>
-                      <button data-delete-dataset="${d.id}" class="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors" title="${T("app.delete")}">${ICONS.trash}</button>
-                    </div>
+                `<div class="tx-row p-4 flex items-center justify-between gap-3">
+                  <button type="button" data-open-dataset="${d.id}" class="min-w-0 flex-1 text-left bg-transparent border-0 p-0 cursor-pointer" style="color:inherit;font:inherit">
+                    <div class="font-medium truncate">${escHtml(datasetDisplayName(d))}</div>
+                    <div class="text-xs tx-secondary mt-0.5">${formatDate(d.created_at)}</div>
+                  </button>
+                  <div class="flex items-center gap-3">
+                    ${statusBadge(d.status || "draft")}
+                    <span class="text-xs ${datasetHasDoc(d) ? "text-green-600 dark:text-green-400" : "tx-secondary"}">${datasetHasDoc(d) ? T("datasets.doc_uploaded") : T("datasets.doc_missing")}</span>
+                    <button data-delete-dataset="${d.id}" class="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors" title="${T("app.delete")}">${ICONS.trash}</button>
                   </div>
                 </div>`,
             )
