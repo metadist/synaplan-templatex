@@ -2703,7 +2703,18 @@ export default {
         () => {
           state.newDatasetOpen = true;
           state.selectedDataset = null;
-          render();
+          // The new-dataset form is rendered by the datasets tab, so if the user
+          // is on a different tab (e.g. overview), switch so the form actually
+          // appears. navigate() updates the hash and re-renders.
+          if (state.tab !== "datasets") {
+            navigate({
+              view: "collection",
+              collectionId: state.collectionId,
+              tab: "datasets",
+            });
+          } else {
+            render();
+          }
         },
       );
       el.querySelector('[data-action="datasets-back"]')?.addEventListener(
