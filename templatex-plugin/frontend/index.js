@@ -656,8 +656,7 @@ export default {
       const emptyHelp = `<div class="tx-card p-6 text-center">
         <div class="inline-flex items-center justify-center w-12 h-12 rounded-full mb-3" style="background:var(--bg-chip);color:var(--txt-secondary)">${ICONS.folder}</div>
         <h3 class="font-semibold text-lg mb-1">${T("collections.empty")}</h3>
-        <p class="text-sm tx-secondary mb-4" style="max-width:440px;margin-left:auto;margin-right:auto">${T("collections.empty_hint")}</p>
-        <button data-action="new-collection" class="tx-btn">${ICONS.plus} ${T("collections.create_first")}</button>
+        <p class="text-sm tx-secondary" style="max-width:440px;margin-left:auto;margin-right:auto">${T("collections.empty_hint")}</p>
       </div>`;
 
       return `<div class="mt-4 space-y-5">
@@ -919,10 +918,6 @@ export default {
           <div class="inline-flex items-center justify-center w-12 h-12 rounded-full mb-3" style="background:var(--bg-chip);color:var(--txt-secondary)">${ICONS.variable}</div>
           <h4 class="font-semibold text-lg mb-1">${T("variables.empty")}</h4>
           <p class="text-sm tx-secondary" style="max-width:440px;margin-left:auto;margin-right:auto">${T("variables.empty_hint")}</p>
-          <div class="mt-4 flex items-center gap-2 justify-center flex-wrap">
-            <button data-action="add-variable" class="tx-btn tx-btn-sm">${ICONS.plus} ${T("variables.new_field")}</button>
-            <button data-action="variables-import" class="tx-btn tx-btn-sm tx-btn-ghost">${ICONS.upload} ${T("variables.import_from_text")}</button>
-          </div>
         </div>`;
       } else {
         body = `<form id="tx-variables-form" class="space-y-2">
@@ -1308,7 +1303,6 @@ export default {
             <div class="inline-flex items-center justify-center w-12 h-12 rounded-full mb-3" style="background:var(--bg-chip);color:var(--txt-secondary)">${ICONS.database}</div>
             <h4 class="font-semibold text-lg mb-1">${T("datasets.empty")}</h4>
             <p class="text-sm tx-secondary" style="max-width:440px;margin-left:auto;margin-right:auto">${T("datasets.empty_hint")}</p>
-            <button data-action="new-dataset" class="tx-btn tx-btn-sm mt-4">${ICONS.plus} ${T("datasets.new")}</button>
           </div>
         </div>`;
       }
@@ -2433,15 +2427,16 @@ export default {
           render();
         },
       );
-      el.querySelector(
-        '[data-action="variables-import-close"]',
-      )?.addEventListener("click", () => {
-        state.variablesImportOpen = false;
-        state.variablesImportFields = null;
-        state.variablesImportError = null;
-        state.variablesImportText = "";
-        render();
-      });
+      el.querySelectorAll('[data-action="variables-import-close"]').forEach(
+        (btn) =>
+          btn.addEventListener("click", () => {
+            state.variablesImportOpen = false;
+            state.variablesImportFields = null;
+            state.variablesImportError = null;
+            state.variablesImportText = "";
+            render();
+          }),
+      );
       el.querySelector(
         '[data-action="variables-import-parse"]',
       )?.addEventListener("click", async () => {
