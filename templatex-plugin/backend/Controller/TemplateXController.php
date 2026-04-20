@@ -449,9 +449,11 @@ class TemplateXController extends AbstractController
         $formData = [
             'id' => $formId,
             'name' => $data['name'],
+            'description' => $data['description'] ?? '',
             'language' => $data['language'] ?? 'de',
             'version' => $data['version'] ?? 1,
             'fields' => $data['fields'] ?? [],
+            'template_ids' => $data['template_ids'] ?? [],
             'created_at' => date('c'),
             'updated_at' => date('c'),
         ];
@@ -510,7 +512,7 @@ class TemplateXController extends AbstractController
 
         $data = json_decode($request->getContent(), true) ?? [];
 
-        $updatable = ['name', 'language', 'version', 'fields'];
+        $updatable = ['name', 'description', 'language', 'version', 'fields', 'template_ids'];
         foreach ($updatable as $field) {
             if (array_key_exists($field, $data)) {
                 $existing[$field] = $data[$field];

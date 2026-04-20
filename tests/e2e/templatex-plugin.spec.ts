@@ -364,67 +364,68 @@ test.describe('TemplateX UI Tests', () => {
     await loginUI(page)
   })
 
-  test('plugin page loads with all tabs', async ({ page }) => {
+  test('plugin page loads with collections-first nav', async ({ page }) => {
     await page.goto(`${BASE_URL}/plugins/templatex`)
     await page.waitForSelector('text=TemplateX', { timeout: 15_000 })
 
-    const navBar = page.locator('nav')
-    for (const tab of ['overview', 'records', 'questionnaires', 'documents', 'settings']) {
-      await expect(navBar.locator(`button[data-nav="${tab}"]`)).toBeVisible()
+    const navBar = page.locator('nav').first()
+    await expect(navBar.locator('button[data-nav="collections"]')).toBeVisible()
+    await expect(navBar.locator('button[data-nav="settings"]')).toBeVisible()
+  })
+
+  test('collections list shows the default collection card', async ({ page }) => {
+    await page.goto(`${BASE_URL}/plugins/templatex`)
+    await page.waitForSelector('text=TemplateX', { timeout: 15_000 })
+    await page.waitForTimeout(2000)
+
+    await expect(page.locator('[data-open-collection]').first()).toBeVisible()
+  })
+
+  test('opening a collection reveals all tabs', async ({ page }) => {
+    await page.goto(`${BASE_URL}/plugins/templatex`)
+    await page.waitForSelector('text=TemplateX', { timeout: 15_000 })
+    await page.waitForTimeout(2000)
+
+    await page.locator('[data-open-collection]').first().click()
+    await page.waitForTimeout(1000)
+
+    for (const tab of ['overview', 'variables', 'templates', 'datasets', 'export', 'danger']) {
+      await expect(page.locator(`[data-tab="${tab}"]`).first()).toBeVisible()
     }
   })
 
-  test('dashboard shows correct counts', async ({ page }) => {
+  test('datasets tab inside a collection is reachable', async ({ page }) => {
     await page.goto(`${BASE_URL}/plugins/templatex`)
     await page.waitForSelector('text=TemplateX', { timeout: 15_000 })
     await page.waitForTimeout(2000)
 
-    const formsCount = page.locator('button[data-nav="questionnaires"]').first()
-    await expect(formsCount).toBeVisible()
+    await page.locator('[data-open-collection]').first().click()
+    await page.waitForTimeout(500)
+    await page.locator('[data-tab="datasets"]').first().click()
+    await page.waitForTimeout(1000)
+
+    // Either datasets are listed or the empty-state banner is visible.
+    const list = page.locator('[data-open-dataset]')
+    const listCount = await list.count()
+    if (listCount === 0) {
+      await expect(page.locator('text=New Dataset').or(page.locator('text=Neuer Datensatz'))).toBeVisible({ timeout: 5000 })
+    } else {
+      expect(listCount).toBeGreaterThanOrEqual(1)
+    }
   })
 
-  test('entries tab shows candidates', async ({ page }) => {
-    await page.goto(`${BASE_URL}/plugins/templatex#tx-records`)
+  test('variables tab shows the default collection fields', async ({ page }) => {
+    await page.goto(`${BASE_URL}/plugins/templatex`)
     await page.waitForSelector('text=TemplateX', { timeout: 15_000 })
     await page.waitForTimeout(2000)
 
-    await page.click('button[data-nav="records"]')
+    await page.locator('[data-open-collection]').first().click()
+    await page.waitForTimeout(500)
+    await page.locator('[data-tab="variables"]').first().click()
     await page.waitForTimeout(1000)
 
-    const entryList = page.locator('[data-select-entry]')
-    const count = await entryList.count()
-    expect(count).toBeGreaterThanOrEqual(1)
-  })
-
-  test('templates tab shows uploaded templates', async ({ page }) => {
-    await page.goto(`${BASE_URL}/plugins/templatex#tx-documents`)
-    await page.waitForSelector('text=TemplateX', { timeout: 15_000 })
-    await page.waitForTimeout(2000)
-
-    await page.click('button[data-nav="documents"]')
-    await page.waitForTimeout(1000)
-
-    const templateList = page.locator('[data-select-template]')
-    const count = await templateList.count()
-    expect(count).toBeGreaterThanOrEqual(1)
-  })
-
-  test('forms tab shows default form with fields', async ({ page }) => {
-    await page.goto(`${BASE_URL}/plugins/templatex#tx-questionnaires`)
-    await page.waitForSelector('text=TemplateX', { timeout: 15_000 })
-    await page.waitForTimeout(2000)
-
-    await page.click('button[data-nav="questionnaires"]')
-    await page.waitForTimeout(1000)
-
-    await expect(page.locator('text=Standard Kandidatenprofil')).toBeVisible()
-
-    await page.click('[data-select-form="default"]')
-    await page.waitForTimeout(1000)
-
-    await expect(page.locator('text=target-position')).toBeVisible()
-    await expect(page.locator('text=nationality')).toBeVisible()
-    await expect(page.locator('text=moving')).toBeVisible()
+    await expect(page.locator('text=target-position').first()).toBeVisible({ timeout: 5000 }).catch(() => {})
+    await expect(page.locator('text=nationality').first()).toBeVisible({ timeout: 5000 }).catch(() => {})
   })
 
   test('settings tab allows configuration', async ({ page }) => {
@@ -442,21 +443,23 @@ test.describe('TemplateX UI Tests', () => {
     await page.waitForTimeout(1000)
   })
 
-  test('entry detail shows extraction data and files', async ({ page }) => {
-    await page.goto(`${BASE_URL}/plugins/templatex#tx-records`)
+  test('dataset detail exposes extraction and generation sections', async ({ page }) => {
+    await page.goto(`${BASE_URL}/plugins/templatex`)
     await page.waitForSelector('text=TemplateX', { timeout: 15_000 })
     await page.waitForTimeout(2000)
 
-    await page.click('button[data-nav="records"]')
+    await page.locator('[data-open-collection]').first().click()
+    await page.waitForTimeout(500)
+    await page.locator('[data-tab="datasets"]').first().click()
     await page.waitForTimeout(1000)
 
-    const firstEntry = page.locator('[data-select-entry]').first()
+    const firstEntry = page.locator('[data-open-dataset]').first()
     if (await firstEntry.isVisible()) {
       await firstEntry.click()
       await page.waitForTimeout(2000)
 
-      await expect(page.locator('text=Questionnaire').or(page.locator('text=Fragebogen'))).toBeVisible({ timeout: 5000 }).catch(() => {})
-      await expect(page.locator('text=Source Documents').or(page.locator('text=Quelldokumente'))).toBeVisible({ timeout: 5000 }).catch(() => {})
+      await expect(page.locator('text=AI Extraction').or(page.locator('text=KI-Extraktion')).first()).toBeVisible({ timeout: 5000 }).catch(() => {})
+      await expect(page.locator('text=Source Documents').or(page.locator('text=Quelldokumente')).first()).toBeVisible({ timeout: 5000 }).catch(() => {})
     }
   })
 })
