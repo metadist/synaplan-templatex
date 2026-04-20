@@ -38,13 +38,21 @@ class TemplateXController extends AbstractController
     private const DATA_TYPE_VALIDATION = 'templatex_validation';
     private const ALLOWED_UPLOAD_EXTENSIONS = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'tiff', 'tif', 'bmp', 'txt', 'rtf', 'odt', 'xls', 'xlsx', 'pptx'];
 
+    /**
+     * Row-group sub-fields whose string value is too rich for a single Word run
+     * and must be rendered as a sequence of paragraphs (date headers, sub-titles,
+     * real bullet items). Listed in "group.subfield" form and handled by the
+     * expandStationDetails() post-pass.
+     */
+    private const RICH_ROW_SUBFIELDS = ['stations.details'];
+
     private const DEFAULT_VARIABLE_SOURCES = [
         'firstname' => ['primary' => 'form', 'fallback' => 'ai'],
         'lastname' => ['primary' => 'form', 'fallback' => 'ai'],
         'fullname' => ['primary' => 'ai', 'fallback' => 'form'],
-        'address1' => ['primary' => 'ai'],
-        'address2' => ['primary' => 'ai'],
-        'zip' => ['primary' => 'ai'],
+        'address1' => ['primary' => 'ai', 'fallback' => 'form'],
+        'address2' => ['primary' => 'ai', 'fallback' => 'form'],
+        'zip' => ['primary' => 'ai', 'fallback' => 'form'],
         'birthdate' => ['primary' => 'ai', 'fallback' => 'form'],
         'nationality' => ['primary' => 'form'],
         'maritalstatus' => ['primary' => 'form'],
@@ -1281,12 +1289,54 @@ class TemplateXController extends AbstractController
 
             $cleanedPath = $this->cleanTemplateMacros($templatePath);
 
+            // Phase A pre-pass: expand list-type placeholders into proper per-item
+            // Word paragraphs (preserving numPr bullet style, indentation, pPr). This
+            // must run on the raw DOCX before PhpWord's TemplateProcessor parses it,
+            // because TemplateProcessor works per-placeholder and cannot split one
+            // paragraph into many.
+            $preClassified = $this->classifyTemplatePlaceholders(
+                array_column($this->extractPlaceholders($cleanedPath), 'key'),
+                $variables,
+                $arrays
+            );
+            $expandedListKeys = $this->expandListParagraphs(
+                $cleanedPath,
+                $preClassified['lists'],
+                $variables,
+                $arrays
+            );
+
+            // Phase C pre-pass: for each row-group whose placeholders do NOT live
+            // inside a <w:tr> (paragraph-based templates such as v2_de), clone the
+            // contiguous paragraph range once per data row and fill simple sub-fields
+            // inline. This is the non-table equivalent of PhpWord's cloneRow.
+            // Rich sub-fields (RICH_ROW_SUBFIELDS, e.g. stations.details) are left
+            // as {{…#N}} placeholders so Phase B's expandStationDetails handles them.
+            $preClonedGroups = $this->cloneParagraphGroupsPrepass(
+                $cleanedPath,
+                $preClassified['rowGroups'] ?? [],
+                $arrays
+            );
+
             $tp = new TemplateProcessor($cleanedPath);
             $tp->setMacroOpeningChars('{{');
             $tp->setMacroClosingChars('}}');
 
             $templatePlaceholders = $tp->getVariables();
             $classified = $this->classifyTemplatePlaceholders($templatePlaceholders, $variables, $arrays);
+
+            // Any list keys already expanded by the pre-pass are gone from the XML;
+            // any that the pre-pass could not cleanly locate (e.g. inline inside a
+            // non-list paragraph) fall through to the <w:br/> fallback in processLists.
+            $classified['lists'] = array_values(array_diff($classified['lists'], $expandedListKeys));
+
+            // Row groups handled by the paragraph-group pre-pass must not go through
+            // cloneRow: they are already cloned in the XML and their simple fields
+            // are already filled. Any leftover {{…#N}} placeholders for rich
+            // sub-fields are handled by Phase B after saveAs().
+            foreach (array_keys($preClonedGroups) as $handledGroup) {
+                unset($classified['rowGroups'][$handledGroup]);
+            }
 
             $this->processRowGroups($tp, $classified['rowGroups'], $arrays);
             $this->processBlockGroups($tp, $classified['blockGroups'], $arrays);
@@ -1301,6 +1351,11 @@ class TemplateXController extends AbstractController
             }
             $outputPath = $genDir . '/' . $docId . '.docx';
             $tp->saveAs($outputPath);
+
+            // Phase B post-pass: expand any station-detail placeholders left behind
+            // by processRowGroups (RICH_ROW_SUBFIELDS) into real Word paragraphs with
+            // bold date headers, role titles, and bulleted achievements.
+            $this->expandStationDetails($outputPath, $arrays['stations'] ?? []);
 
             if (is_file($cleanedPath)) {
                 unlink($cleanedPath);
@@ -2058,13 +2113,19 @@ class TemplateXController extends AbstractController
             }
         }
 
-        // Backward compat: pick up legacy 'stations' from ai_extracted if not covered by a form table field
+        // Backward compat: pick up legacy 'stations' from any source if not covered
+        // by a form table field. Resolution order: override > form > AI > empty —
+        // matching the same precedence used for other fields.
         if (!isset($scannedKeys['stations']) && !isset($arrays['stations'])) {
-            $stations = $aiData['stations'] ?? [];
+            $stations = null;
             if (array_key_exists('stations', $overrides) && is_array($overrides['stations'])) {
                 $stations = $overrides['stations'];
+            } elseif (isset($formData['stations']) && is_array($formData['stations'])) {
+                $stations = $formData['stations'];
+            } elseif (isset($aiData['stations']) && is_array($aiData['stations'])) {
+                $stations = $aiData['stations'];
             }
-            if (!empty($stations)) {
+            if (is_array($stations) && !empty($stations)) {
                 $arrays['stations'] = $stations;
             }
         }
@@ -2186,6 +2247,16 @@ class TemplateXController extends AbstractController
                 $row = $data[$i] ?? [];
                 foreach (array_keys($uniqueFieldSuffixes) as $suffix) {
                     $cleanSuffix = str_replace('.N', '', $suffix);
+
+                    // Rich sub-fields are left as-is (placeholder remains in XML) and
+                    // rendered by a post-save pass that can emit multiple paragraphs,
+                    // proper bullet formatting, bold date headers, etc. See
+                    // expandStationDetails(). Simple sub-fields continue through the
+                    // plain setValue path below.
+                    if (in_array("{$groupName}.{$cleanSuffix}", self::RICH_ROW_SUBFIELDS, true)) {
+                        continue;
+                    }
+
                     $value = $row[$cleanSuffix] ?? '';
                     $value = htmlspecialchars($value, ENT_XML1 | ENT_QUOTES, 'UTF-8');
                     if (str_contains($value, "\n")) {
@@ -2249,12 +2320,20 @@ class TemplateXController extends AbstractController
         foreach ($checkboxes as $cbKey => $fields) {
             $yesVal = (bool) ($variables["checkb.{$cbKey}.yes"] ?? false);
             foreach ($fields as $ph) {
-                $isYes = str_ends_with($ph, '.yes');
+                $checked = str_ends_with($ph, '.yes') ? $yesVal : !$yesVal;
+
+                // Best-effort: for templates that use real Word checkbox content
+                // controls (<w:sdt>…<w:sdtCheckbox>), update the checkbox state via
+                // PhpWord. For plain-text placeholders (like highlighted {{checkb.*.*}}
+                // markers in table cells) setCheckbox either throws or silently
+                // no-ops — so we always follow up with a text replacement to a
+                // visible glyph as a guaranteed fallback.
                 try {
-                    $tp->setCheckbox($ph, $isYes ? $yesVal : !$yesVal);
+                    $tp->setCheckbox($ph, $checked);
                 } catch (\Throwable) {
-                    $tp->setValue($ph, ($isYes ? $yesVal : !$yesVal) ? '☑' : '☐');
+                    // ignored — text replacement below is the guaranteed path
                 }
+                $tp->setValue($ph, $checked ? '☒' : '☐');
             }
         }
     }
@@ -2314,5 +2393,544 @@ class TemplateXController extends AbstractController
         $zip->close();
 
         return $cleanedPath;
+    }
+
+    /**
+     * Pre-pass: for each list-type placeholder, find the Word paragraph (<w:p>)
+     * that contains it and clone the entire paragraph once per list item. This
+     * preserves paragraph formatting (bullet style via <w:numPr>, indentation,
+     * justification, run properties) so each item renders as a proper paragraph
+     * in Word instead of line-break text inside a single paragraph.
+     *
+     * Two outcomes per placeholder key:
+     *  - Expanded: key is returned in the result; the placeholder no longer exists
+     *    in the DOCX and PhpWord will simply ignore it.
+     *  - Not expanded (placeholder missing, inline, or the regex could not match):
+     *    key is left in place and processLists() handles it via the <w:br/> fallback.
+     *
+     * Empty lists cause the host paragraph to be dropped entirely.
+     *
+     * @param list<string>         $listKeys
+     * @param array<string, mixed> $variables
+     * @param array<string, mixed> $arrays
+     * @return list<string>        keys that were successfully expanded
+     */
+    private function expandListParagraphs(string $docxPath, array $listKeys, array $variables, array $arrays): array
+    {
+        if (empty($listKeys)) {
+            return [];
+        }
+
+        $zip = new \ZipArchive();
+        if ($zip->open($docxPath) !== true) {
+            $this->logger->warning('Failed to open DOCX for list expansion', ['path' => $docxPath]);
+            return [];
+        }
+
+        $xml = $zip->getFromName('word/document.xml');
+        if ($xml === false) {
+            $zip->close();
+            return [];
+        }
+
+        $originalXml = $xml;
+        $expanded = [];
+
+        foreach ($listKeys as $key) {
+            $raw = array_key_exists($key, $variables) ? $variables[$key] : ($arrays[$key] ?? null);
+            $items = $this->normalizeListValue($raw);
+
+            $placeholder = '{{' . $key . '}}';
+            if (!str_contains($xml, $placeholder)) {
+                continue;
+            }
+
+            // Non-greedy match of the <w:p>...</w:p> containing the placeholder.
+            // The negative lookahead on </w:p> keeps us inside one paragraph.
+            $pattern = '#<w:p\b[^>]*>(?:(?!</w:p>).)*?' . preg_quote($placeholder, '#') . '(?:(?!</w:p>).)*?</w:p>#s';
+
+            $replacementCount = 0;
+            $newXml = preg_replace_callback(
+                $pattern,
+                function (array $match) use ($placeholder, $items, &$replacementCount): string {
+                    $replacementCount++;
+                    $paragraph = $match[0];
+
+                    if ($items === [] || $items === null) {
+                        return '';
+                    }
+
+                    $out = '';
+                    foreach ($items as $item) {
+                        $escaped = $this->escapeForWordXml($item);
+                        $out .= str_replace($placeholder, $escaped, $paragraph);
+                    }
+                    return $out;
+                },
+                $xml
+            );
+
+            if ($newXml !== null && $replacementCount > 0) {
+                $xml = $newXml;
+                $expanded[] = $key;
+            }
+        }
+
+        if ($xml !== $originalXml) {
+            $zip->addFromString('word/document.xml', $xml);
+        }
+        $zip->close();
+
+        return $expanded;
+    }
+
+    /**
+     * Phase C pre-pass: clone paragraph-based row groups that are not inside a
+     * Word table row. PhpWord's TemplateProcessor::cloneRow() only works on
+     * <w:tr> structures — templates that lay out a repeating block as a
+     * sequence of plain paragraphs (e.g. one paragraph per field) previously
+     * had their placeholders silently cleared when cloneRow threw. This method
+     * is the paragraph-level equivalent: it finds the smallest contiguous
+     * <w:p>…<w:p> range covering all of a group's placeholders, duplicates
+     * that range once per row of array data, and substitutes simple sub-field
+     * placeholders inline. Rich sub-fields listed in RICH_ROW_SUBFIELDS are
+     * suffixed with #N and left for Phase B's post-save renderer.
+     *
+     * Placeholders already inside a <w:tr> are skipped — cloneRow is still the
+     * right tool for table-based layouts.
+     *
+     * @param array<string, list<string>> $rowGroups groupName => list of full placeholder keys (e.g. "stations.time.N")
+     * @param array<string, mixed>        $arrays
+     * @return array<string, true>        set of group names handled by this pre-pass
+     */
+    private function cloneParagraphGroupsPrepass(string $docxPath, array $rowGroups, array $arrays): array
+    {
+        $handled = [];
+        if (empty($rowGroups)) {
+            return $handled;
+        }
+
+        $zip = new \ZipArchive();
+        if ($zip->open($docxPath) !== true) {
+            return $handled;
+        }
+
+        $xml = $zip->getFromName('word/document.xml');
+        if ($xml === false) {
+            $zip->close();
+            return $handled;
+        }
+
+        $originalXml = $xml;
+
+        foreach ($rowGroups as $groupName => $placeholders) {
+            if (!is_array($placeholders) || empty($placeholders)) {
+                continue;
+            }
+
+            $data = $arrays[$groupName] ?? [];
+            if (!is_array($data)) {
+                continue;
+            }
+            $count = count($data);
+            if ($count === 0) {
+                continue;
+            }
+
+            // If the first placeholder lives inside a <w:tr>, defer to cloneRow.
+            $firstProbe = '{{' . $placeholders[0] . '}}';
+            $firstPos = strpos($xml, $firstProbe);
+            if ($firstPos === false) {
+                continue;
+            }
+            $before = substr($xml, 0, $firstPos);
+            $trOpenA = strrpos($before, '<w:tr ');
+            $trOpenB = strrpos($before, '<w:tr>');
+            $trOpen = max($trOpenA === false ? -1 : $trOpenA, $trOpenB === false ? -1 : $trOpenB);
+            $trClose = strrpos($before, '</w:tr>');
+            $insideRow = $trOpen !== -1 && ($trClose === false || $trOpen > $trClose);
+            if ($insideRow) {
+                continue;
+            }
+
+            // Locate every <w:p>…</w:p> paragraph that contains any group placeholder.
+            preg_match_all('#<w:p\b[^>]*>(?:(?!</w:p>).)*?</w:p>#s', $xml, $paragraphs, PREG_OFFSET_CAPTURE);
+            if (empty($paragraphs[0])) {
+                continue;
+            }
+
+            $hitIndices = [];
+            foreach ($paragraphs[0] as $idx => $entry) {
+                foreach ($placeholders as $ph) {
+                    if (str_contains($entry[0], '{{' . $ph . '}}')) {
+                        $hitIndices[] = $idx;
+                        break;
+                    }
+                }
+            }
+            if (empty($hitIndices)) {
+                continue;
+            }
+
+            $firstIdx = min($hitIndices);
+            $lastIdx  = max($hitIndices);
+            $rangeStart = $paragraphs[0][$firstIdx][1];
+            $lastEntry  = $paragraphs[0][$lastIdx];
+            $rangeEnd   = $lastEntry[1] + strlen($lastEntry[0]);
+            $blockXml   = substr($xml, $rangeStart, $rangeEnd - $rangeStart);
+
+            // Build N copies with inline substitution. Rich sub-fields are suffixed
+            // but not replaced — Phase B will expand them after saveAs.
+            $allCopies = '';
+            for ($n = 1; $n <= $count; $n++) {
+                $row = is_array($data[$n - 1] ?? null) ? $data[$n - 1] : [];
+                $copy = $blockXml;
+                foreach ($placeholders as $ph) {
+                    $suffix = substr($ph, strlen($groupName) + 1);
+                    $cleanSubfield = str_replace('.N', '', $suffix);
+                    $richKey = "{$groupName}.{$cleanSubfield}";
+                    $token = '{{' . $ph . '}}';
+
+                    if (in_array($richKey, self::RICH_ROW_SUBFIELDS, true)) {
+                        $copy = str_replace($token, '{{' . $ph . '#' . $n . '}}', $copy);
+                        continue;
+                    }
+
+                    $value = $row[$cleanSubfield] ?? '';
+                    $value = htmlspecialchars((string) $value, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+                    if (str_contains($value, "\n")) {
+                        $value = str_replace("\n", '</w:t><w:br/><w:t>', $value);
+                    }
+                    $copy = str_replace($token, $value, $copy);
+                }
+                $allCopies .= $copy;
+            }
+
+            $xml = substr($xml, 0, $rangeStart) . $allCopies . substr($xml, $rangeEnd);
+            $handled[$groupName] = true;
+        }
+
+        if ($xml !== $originalXml) {
+            $zip->addFromString('word/document.xml', $xml);
+        }
+        $zip->close();
+
+        return $handled;
+    }
+
+    /**
+     * Normalize a list-type variable value into an array of non-empty trimmed strings.
+     * Accepts arrays (mixed element types are cast to string), newline- or
+     * semicolon-separated strings, or null. Returns null only for genuinely
+     * missing values (distinct from empty list []), so the caller can
+     * distinguish "drop the paragraph because empty" from "do nothing".
+     */
+    private function normalizeListValue(mixed $val): ?array
+    {
+        if ($val === null) {
+            return null;
+        }
+        if (is_array($val)) {
+            $out = [];
+            foreach ($val as $entry) {
+                if (is_scalar($entry)) {
+                    $s = trim((string) $entry);
+                    if ($s !== '') {
+                        $out[] = $s;
+                    }
+                }
+            }
+            return $out;
+        }
+        if (is_string($val)) {
+            $parts = preg_split('/\r\n|\r|\n/', $val) ?: [];
+            $out = [];
+            foreach ($parts as $p) {
+                $p = trim($p);
+                if ($p !== '') {
+                    $out[] = $p;
+                }
+            }
+            return $out;
+        }
+        return null;
+    }
+
+    /**
+     * XML-escape a user string for embedding inside a <w:t>...</w:t> run.
+     * Intra-item newlines are preserved as <w:br/> soft breaks within the
+     * same paragraph (for multi-line list items such as "Deutsch\n(Muttersprache)").
+     */
+    private function escapeForWordXml(string $text): string
+    {
+        $escaped = htmlspecialchars($text, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+        if (preg_match('/\r|\n/', $escaped) === 1) {
+            $escaped = preg_replace('/\r\n|\r|\n/', '</w:t><w:br/><w:t>', $escaped);
+        }
+        return $escaped;
+    }
+
+    /**
+     * Phase B post-pass: after TemplateProcessor has saved the DOCX, every
+     * {{stations.details.N#i}} placeholder (left intact by RICH_ROW_SUBFIELDS)
+     * is replaced with a sequence of real <w:p> elements parsed from the
+     * station's `details` string. This turns multi-line prose blocks with
+     * date ranges, sub-titles, and dash-prefixed achievements into properly
+     * formatted Word paragraphs with bold date headers and bullet items.
+     *
+     * The host paragraph's <w:pPr> is cloned as the base style for headers
+     * and plain text lines; bullet paragraphs get their own <w:pPr> using a
+     * numId auto-detected from the template's numbering.xml (falling back to
+     * a "• " character prefix if no bullet numbering is defined).
+     *
+     * @param list<array<string, mixed>|string> $stations
+     */
+    private function expandStationDetails(string $docxPath, array $stations): void
+    {
+        if (empty($stations)) {
+            return;
+        }
+
+        $zip = new \ZipArchive();
+        if ($zip->open($docxPath) !== true) {
+            $this->logger->warning('Failed to open DOCX for station-detail expansion', ['path' => $docxPath]);
+            return;
+        }
+
+        $xml = $zip->getFromName('word/document.xml');
+        if ($xml === false) {
+            $zip->close();
+            return;
+        }
+
+        $numberingXml = $zip->getFromName('word/numbering.xml');
+        $bulletNumId = is_string($numberingXml) ? $this->detectBulletNumId($numberingXml) : null;
+
+        $originalXml = $xml;
+
+        foreach ($stations as $i => $station) {
+            $num = $i + 1;
+            $details = '';
+            if (is_array($station)) {
+                $details = (string) ($station['details'] ?? '');
+            } elseif (is_string($station)) {
+                $details = $station;
+            }
+
+            // Both cloneRow-suffixed and unsuffixed variants are attempted so the
+            // pass is robust against templates that use either style.
+            foreach (["{{stations.details.N#{$num}}}", "{{stations.details#{$num}}}"] as $placeholder) {
+                if (!str_contains($xml, $placeholder)) {
+                    continue;
+                }
+
+                if (trim($details) === '') {
+                    // No content → swallow the placeholder but keep the (now empty)
+                    // paragraph so the table row/cell structure stays intact.
+                    $xml = str_replace($placeholder, '', $xml);
+                    continue;
+                }
+
+                $pattern = '#<w:p\b[^>]*>(?:(?!</w:p>).)*?' . preg_quote($placeholder, '#') . '(?:(?!</w:p>).)*?</w:p>#s';
+
+                $replaced = preg_replace_callback(
+                    $pattern,
+                    function (array $m) use ($details, $bulletNumId): string {
+                        $basePPr = '';
+                        if (preg_match('#<w:pPr>.*?</w:pPr>#s', $m[0], $pm)) {
+                            $basePPr = $pm[0];
+                        }
+                        return $this->renderStationDetailsXml($details, $basePPr, $bulletNumId);
+                    },
+                    $xml
+                );
+
+                if ($replaced !== null && $replaced !== $xml) {
+                    $xml = $replaced;
+                } else {
+                    // Regex couldn't locate the host paragraph (unusual nesting).
+                    // Fall back to line-break substitution so the cell is not left
+                    // with a raw placeholder.
+                    $fallback = $this->escapeForWordXml($details);
+                    $xml = str_replace($placeholder, $fallback, $xml);
+                }
+            }
+        }
+
+        if ($xml !== $originalXml) {
+            $zip->addFromString('word/document.xml', $xml);
+        }
+        $zip->close();
+    }
+
+    /**
+     * Auto-detect a numId that produces a bullet list from a template's numbering.xml.
+     *
+     * Looks for a <w:num w:numId="X"> whose referenced <w:abstractNum> has
+     * <w:numFmt w:val="bullet"/> at level 0. Returns the first such numId or
+     * null if no bullet numbering is defined.
+     */
+    private function detectBulletNumId(string $numberingXml): ?int
+    {
+        if ($numberingXml === '') {
+            return null;
+        }
+
+        $bulletAbstractIds = [];
+        if (preg_match_all('#<w:abstractNum\b[^>]*?w:abstractNumId="(\d+)"[^>]*>(.*?)</w:abstractNum>#s', $numberingXml, $am)) {
+            foreach ($am[1] as $idx => $absId) {
+                $body = $am[2][$idx];
+                if (preg_match('#<w:lvl\b[^>]*?w:ilvl="0"[^>]*>(.*?)</w:lvl>#s', $body, $lvl)) {
+                    if (str_contains($lvl[1], '<w:numFmt w:val="bullet"/>')) {
+                        $bulletAbstractIds[$absId] = true;
+                    }
+                }
+            }
+        }
+
+        if (empty($bulletAbstractIds)) {
+            return null;
+        }
+
+        if (preg_match_all('#<w:num\b[^>]*?w:numId="(\d+)"[^>]*>(.*?)</w:num>#s', $numberingXml, $nm)) {
+            foreach ($nm[1] as $idx => $numId) {
+                $body = $nm[2][$idx];
+                if (preg_match('#<w:abstractNumId\s+w:val="(\d+)"\s*/>#', $body, $ref)) {
+                    if (isset($bulletAbstractIds[$ref[1]])) {
+                        return (int) $numId;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Parse a multi-line station `details` string into a sequence of typed blocks.
+     *
+     * Heuristics (German-first but language-agnostic patterns):
+     *   - blank line          → spacer (consecutive spacers collapse to one)
+     *   - date-range line     → date header (rendered bold)
+     *   - "- text" / "• text" / "– text" / "* text" / "· text" → bullet
+     *   - anything else       → plain text line (typically a sub-position title)
+     *
+     * @return list<array{type: string, text?: string}>
+     */
+    private function parseStationDetails(string $details): array
+    {
+        $lines = preg_split('/\r\n|\r|\n/', $details) ?: [];
+
+        // Matches patterns like "02/2021 -- heute", "02.2021 – 04.2024", "2019-2021"
+        $dateRangePattern = '~^\s*\d{1,2}[./]\d{4}\s*[\-–—]{1,2}\s*(?:heute|today|laufend|\d{1,2}[./]\d{4})\s*$~iu';
+        $looseYearRange   = '~^\s*\d{4}\s*[\-–—]{1,2}\s*(?:heute|today|laufend|\d{4})\s*$~iu';
+        $bulletPrefix     = '~^[\-*•·–—]\s+(.*)$~u';
+
+        $blocks = [];
+        foreach ($lines as $line) {
+            $stripped = trim($line);
+
+            if ($stripped === '') {
+                $blocks[] = ['type' => 'spacer'];
+                continue;
+            }
+
+            if (preg_match($dateRangePattern, $stripped) === 1 || preg_match($looseYearRange, $stripped) === 1) {
+                $blocks[] = ['type' => 'date', 'text' => $stripped];
+                continue;
+            }
+
+            if (preg_match($bulletPrefix, $stripped, $bm) === 1) {
+                $blocks[] = ['type' => 'bullet', 'text' => trim($bm[1])];
+                continue;
+            }
+
+            $blocks[] = ['type' => 'text', 'text' => $stripped];
+        }
+
+        // Collapse consecutive spacers
+        $collapsed = [];
+        $lastSpacer = false;
+        foreach ($blocks as $b) {
+            if ($b['type'] === 'spacer') {
+                if ($lastSpacer) {
+                    continue;
+                }
+                $lastSpacer = true;
+            } else {
+                $lastSpacer = false;
+            }
+            $collapsed[] = $b;
+        }
+
+        // Trim leading/trailing spacers
+        while (!empty($collapsed) && $collapsed[0]['type'] === 'spacer') {
+            array_shift($collapsed);
+        }
+        while (!empty($collapsed) && end($collapsed)['type'] === 'spacer') {
+            array_pop($collapsed);
+        }
+
+        return $collapsed;
+    }
+
+    /**
+     * Render a parsed details string into a sequence of <w:p> OOXML paragraphs
+     * suitable for inlining inside a table cell (<w:tc>).
+     *
+     * - $basePPr is the host paragraph's <w:pPr> including its <w:rPr> pragraph-mark
+     *   defaults; it is reused verbatim for non-bullet paragraphs so fonts, sizes,
+     *   and justification stay consistent with the surrounding cell.
+     * - $bulletNumId, when non-null, means the document has a real bullet numbering
+     *   entry; bullet paragraphs reference it via <w:numPr>. When null, bullets
+     *   degrade to a character "•" prefix with a hanging indent.
+     */
+    private function renderStationDetailsXml(string $details, string $basePPr, ?int $bulletNumId): string
+    {
+        $blocks = $this->parseStationDetails($details);
+        if (empty($blocks)) {
+            return '';
+        }
+
+        $bulletPPr = $bulletNumId !== null
+            ? '<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="' . $bulletNumId . '"/></w:numPr>'
+                . '<w:spacing w:after="0"/><w:ind w:left="360" w:hanging="360"/></w:pPr>'
+            : '<w:pPr><w:spacing w:after="0"/><w:ind w:left="360" w:hanging="360"/></w:pPr>';
+
+        $out = '';
+        foreach ($blocks as $b) {
+            switch ($b['type']) {
+                case 'spacer':
+                    // Empty paragraph inheriting the cell default (vertical breath)
+                    $out .= '<w:p>' . $basePPr . '</w:p>';
+                    break;
+
+                case 'date':
+                    $text = $this->escapeForWordXml((string) ($b['text'] ?? ''));
+                    $out .= '<w:p>' . $basePPr
+                        . '<w:r><w:rPr><w:b/></w:rPr>'
+                        . '<w:t xml:space="preserve">' . $text . '</w:t></w:r>'
+                        . '</w:p>';
+                    break;
+
+                case 'bullet':
+                    $text = $this->escapeForWordXml((string) ($b['text'] ?? ''));
+                    $prefix = $bulletNumId !== null ? '' : '• ';
+                    $out .= '<w:p>' . $bulletPPr
+                        . '<w:r><w:t xml:space="preserve">' . $prefix . $text . '</w:t></w:r>'
+                        . '</w:p>';
+                    break;
+
+                case 'text':
+                default:
+                    $text = $this->escapeForWordXml((string) ($b['text'] ?? ''));
+                    $out .= '<w:p>' . $basePPr
+                        . '<w:r><w:t xml:space="preserve">' . $text . '</w:t></w:r>'
+                        . '</w:p>';
+                    break;
+            }
+        }
+
+        return $out;
     }
 }
