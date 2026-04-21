@@ -305,7 +305,7 @@ function buildTemplate2(string $outPath): void
     $section->addLine($hr);
     $section->addText('{{relevantfortargetposlist}}', $value, ['spaceAfter' => 140]);
 
-    $section->addText('SPRACHEN & SKILLS', $h2);
+    $section->addText('SPRACHEN UND SKILLS', $h2);
     $section->addLine($hr);
     $skills = $section->addTable(['borderSize' => 0, 'cellMargin' => 40]);
     $skills->addRow();
@@ -317,7 +317,7 @@ function buildTemplate2(string $outPath): void
     $b->addText('{{otherskillslist}}', $value);
     $section->addTextBreak();
 
-    $section->addText('KONDITIONEN & BEREITSCHAFT', $h2);
+    $section->addText('KONDITIONEN UND BEREITSCHAFT', $h2);
     $section->addLine($hr);
     $cond = $section->addTable(['borderSize' => 0, 'cellMargin' => 40]);
     foreach ([

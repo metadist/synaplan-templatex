@@ -21,12 +21,13 @@ scratch via PhpWord with a neutral HR-profile layout.
 
 | Path | Purpose |
 |---|---|
-| `seed-demo.php` | The repeatable script. Regenerates everything below from scratch. |
+| `seed-demo.php` | Step 1 — builds the demo files on disk (offline, no Synaplan required). |
+| `install-demo.php` | Step 2 — pushes the demo into a running Synaplan + TemplateX through the HTTP API. |
 | `example-variables.md` | Reference of all `{{placeholders}}`, grouped by type (scalar, list, checkbox, optional, station). |
 | `demo-template1.docx` | Executive / Senior Fashion profile (full layout). |
 | `demo-template2.docx` | Retail Store Manager profile (compact layout, same placeholders). |
-| `collections.json` | Machine-readable export: the 2 Collections + 6 Datasets. |
-| `filled/*.docx` | One rendered DOCX per candidate, using the collection's template. |
+| `collections.json` | Machine-readable export: the 2 Collections + 6 Datasets. Consumed by `install-demo.php`. |
+| `filled/*.docx` | One rendered DOCX per candidate (offline reference render). |
 
 ## Collections
 
@@ -50,6 +51,12 @@ All 6 candidates are fictional. Any similarity to real persons is coincidental.
 
 ## How to run
 
+There are two steps — **seed-demo.php just produces files on disk; it does
+not touch your running Synaplan**. To see the two Collections and their
+candidates appear in the plugin UI, run the installer as the second step.
+
+### 1) Generate the files (offline)
+
 ```bash
 # From the templatex repo root:
 php tests/demo/seed-demo.php
@@ -65,6 +72,49 @@ The script auto-detects PhpWord from (in order):
 It needs **only** PhpWord for template construction. The fill step uses
 pure PHP (`ZipArchive` + regex) and mirrors the same primitives the Phase A
 and Phase B regression tests exercise.
+
+### 2) Install into your running Synaplan
+
+```bash
+# Requires Synaplan running locally (default: http://localhost:8000)
+php tests/demo/install-demo.php
+
+# Useful options:
+#   --wipe      delete any previously installed [FashionDemo] records first
+#   --generate  ask the plugin to render each candidate's DOCX in-app too
+#               (so filled documents appear under each candidate's Documents tab)
+php tests/demo/install-demo.php --wipe --generate
+```
+
+Environment overrides (all have sensible defaults for a local dev instance):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `SYNAPLAN_API_URL` | `http://localhost:8000` | Base URL of the Synaplan backend |
+| `SYNAPLAN_USER_ID` | `1` | User ID that owns the demo records |
+| `SYNAPLAN_ADMIN_EMAIL` | `admin@synaplan.com` | Login email |
+| `SYNAPLAN_ADMIN_PASS` | `admin123` | Login password |
+
+The installer:
+
+1. Logs in and stores the auth cookie.
+2. Uploads `demo-template1.docx` and `demo-template2.docx` through
+   `POST /templates` (with `[FashionDemo]` tags so `--wipe` can find them).
+3. Creates the 2 Collections through `POST /forms` with properly typed
+   `fields[]` (text / select / list / table with columns — the `stations`
+   table is a proper repeating group with `employer`, `time`, `positions`,
+   `details` columns).
+4. Creates each candidate through `POST /candidates` with `field_values`
+   pre-filled (scalars, lists, the `stations` table, plus `moving` /
+   `commute` / `travel` as `Ja`/`Nein`).
+5. Calls `PUT /candidates/{id}/variables` so the overrides win over any
+   future source-routing changes.
+6. Optionally (`--generate`) calls `POST /candidates/{id}/generate/{templateId}`
+   so the plugin renders each candidate in-app using its own engine. After
+   that, every candidate shows a completed document in its Documents tab.
+
+Open `/plugins/templatex` in the UI after step 2 — the two
+`[FashionDemo]` collections and their 6 candidates will be visible.
 
 ## Relation to production TemplateXController
 
