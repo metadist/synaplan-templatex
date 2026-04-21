@@ -1,0 +1,931 @@
+{
+    "generated_at": "2026-04-21T06:31:10+00:00",
+    "source": "tests/demo/seed-demo.php",
+    "note": "Fictional fashion-industry candidate data in German. Synthetic, no real persons.",
+    "collections": [
+        {
+            "id": 1,
+            "slug": "fashion-executive-profiles",
+            "name": "Fashion Executive Profiles (DE)",
+            "description": "Senior und Executive Rollen in der Modebranche — Marketing, E-Commerce, Business Unit. Verwendet das vollständige Variablen-Set aus example-variables.md.",
+            "language": "de",
+            "template": "demo-template1.docx",
+            "fields": [
+                {
+                    "key": "target-position",
+                    "type": "scalar",
+                    "description": "Die offene Stelle (Zielposition), aus dem Formular."
+                },
+                {
+                    "key": "month",
+                    "type": "scalar",
+                    "description": "Monat der Profilerstellung."
+                },
+                {
+                    "key": "year",
+                    "type": "scalar",
+                    "description": "Jahr der Profilerstellung."
+                },
+                {
+                    "key": "fullname",
+                    "type": "scalar",
+                    "description": "Vollständiger Name (aus Lebenslauf)."
+                },
+                {
+                    "key": "address1",
+                    "type": "scalar",
+                    "description": "Straße und Hausnummer."
+                },
+                {
+                    "key": "address2",
+                    "type": "scalar",
+                    "description": "Ort."
+                },
+                {
+                    "key": "zip",
+                    "type": "scalar",
+                    "description": "Postleitzahl."
+                },
+                {
+                    "key": "birthdate",
+                    "type": "scalar",
+                    "description": "Geburtsdatum."
+                },
+                {
+                    "key": "nationality",
+                    "type": "scalar",
+                    "description": "Nationalität (Formular)."
+                },
+                {
+                    "key": "maritalstatus",
+                    "type": "scalar",
+                    "description": "Familienstand (Formular)."
+                },
+                {
+                    "key": "number",
+                    "type": "scalar",
+                    "description": "Telefonnummer."
+                },
+                {
+                    "key": "email",
+                    "type": "scalar",
+                    "description": "E-Mail-Adresse."
+                },
+                {
+                    "key": "currentposition",
+                    "type": "scalar",
+                    "description": "Aktuelle Position (Lebenslauf)."
+                },
+                {
+                    "key": "moving",
+                    "type": "scalar",
+                    "description": "Umzugsbereitschaft (Ja / Nein)."
+                },
+                {
+                    "key": "travelorcommute",
+                    "type": "scalar",
+                    "description": "Pendel-/Reisebereitschaft (Ja / Nein)."
+                },
+                {
+                    "key": "noticeperiod",
+                    "type": "scalar",
+                    "description": "Kündigungsfrist."
+                },
+                {
+                    "key": "currentansalary",
+                    "type": "scalar",
+                    "description": "Aktuelles Bruttojahresgehalt."
+                },
+                {
+                    "key": "expectedansalary",
+                    "type": "scalar",
+                    "description": "Erwartetes Bruttojahresgehalt."
+                },
+                {
+                    "key": "education",
+                    "type": "scalar",
+                    "description": "Ausbildung und Studium."
+                },
+                {
+                    "key": "workinghours",
+                    "type": "scalar",
+                    "description": "Vertragliche Arbeitszeit."
+                },
+                {
+                    "key": "relevantposlist",
+                    "type": "list",
+                    "description": "Vorherige relevante Positionen (manuell gepflegt)."
+                },
+                {
+                    "key": "relevantfortargetposlist",
+                    "type": "list",
+                    "description": "Für die Zielposition relevante Erfahrung (Direct Reports, P&L, Store-Fläche…)."
+                },
+                {
+                    "key": "languageslist",
+                    "type": "list",
+                    "description": "Sprachkenntnisse mit Level."
+                },
+                {
+                    "key": "benefitslist",
+                    "type": "list",
+                    "description": "Benefits (Firmenwagen, Bonus, bAV…)."
+                },
+                {
+                    "key": "otherskillslist",
+                    "type": "list",
+                    "description": "Sonstige Kenntnisse (Tools, Software, Zertifikate)."
+                },
+                {
+                    "key": "checkb.moving.yes",
+                    "type": "checkbox",
+                    "description": "Umzugsbereitschaft Ja."
+                },
+                {
+                    "key": "checkb.moving.no",
+                    "type": "checkbox",
+                    "description": "Umzugsbereitschaft Nein."
+                },
+                {
+                    "key": "checkb.commute.yes",
+                    "type": "checkbox",
+                    "description": "Pendelbereitschaft Ja."
+                },
+                {
+                    "key": "checkb.commute.no",
+                    "type": "checkbox",
+                    "description": "Pendelbereitschaft Nein."
+                },
+                {
+                    "key": "checkb.travel.yes",
+                    "type": "checkbox",
+                    "description": "Reisebereitschaft Ja."
+                },
+                {
+                    "key": "checkb.travel.no",
+                    "type": "checkbox",
+                    "description": "Reisebereitschaft Nein."
+                },
+                {
+                    "key": "optional.firmenwagen",
+                    "type": "optional",
+                    "description": "Nur ausgeben, wenn Firmenwagen im Formular aktiviert."
+                },
+                {
+                    "key": "stations.employer.N",
+                    "type": "station",
+                    "description": "Arbeitgeber pro Station."
+                },
+                {
+                    "key": "stations.time.N",
+                    "type": "station",
+                    "description": "Zeitraum pro Station."
+                },
+                {
+                    "key": "stations.positions.N",
+                    "type": "station",
+                    "description": "Berufsbezeichnung pro Station."
+                },
+                {
+                    "key": "stations.details.N",
+                    "type": "station",
+                    "description": "Detailtexte pro Station (multi-line mit Datumsheadern und Bullets)."
+                }
+            ]
+        },
+        {
+            "id": 2,
+            "slug": "fashion-retail-manager-profiles",
+            "name": "Fashion Retail Manager Profiles (DE)",
+            "description": "Store Manager, Area Manager und Visual Merchandising Rollen im stationären Fashion-Retail. Identisches Variablen-Set, kompakteres Template-Layout (demo-template2.docx).",
+            "language": "de",
+            "template": "demo-template2.docx",
+            "fields": [
+                {
+                    "key": "target-position",
+                    "type": "scalar",
+                    "description": "Die offene Stelle (Zielposition), aus dem Formular."
+                },
+                {
+                    "key": "month",
+                    "type": "scalar",
+                    "description": "Monat der Profilerstellung."
+                },
+                {
+                    "key": "year",
+                    "type": "scalar",
+                    "description": "Jahr der Profilerstellung."
+                },
+                {
+                    "key": "fullname",
+                    "type": "scalar",
+                    "description": "Vollständiger Name (aus Lebenslauf)."
+                },
+                {
+                    "key": "address1",
+                    "type": "scalar",
+                    "description": "Straße und Hausnummer."
+                },
+                {
+                    "key": "address2",
+                    "type": "scalar",
+                    "description": "Ort."
+                },
+                {
+                    "key": "zip",
+                    "type": "scalar",
+                    "description": "Postleitzahl."
+                },
+                {
+                    "key": "birthdate",
+                    "type": "scalar",
+                    "description": "Geburtsdatum."
+                },
+                {
+                    "key": "nationality",
+                    "type": "scalar",
+                    "description": "Nationalität (Formular)."
+                },
+                {
+                    "key": "maritalstatus",
+                    "type": "scalar",
+                    "description": "Familienstand (Formular)."
+                },
+                {
+                    "key": "number",
+                    "type": "scalar",
+                    "description": "Telefonnummer."
+                },
+                {
+                    "key": "email",
+                    "type": "scalar",
+                    "description": "E-Mail-Adresse."
+                },
+                {
+                    "key": "currentposition",
+                    "type": "scalar",
+                    "description": "Aktuelle Position (Lebenslauf)."
+                },
+                {
+                    "key": "moving",
+                    "type": "scalar",
+                    "description": "Umzugsbereitschaft (Ja / Nein)."
+                },
+                {
+                    "key": "travelorcommute",
+                    "type": "scalar",
+                    "description": "Pendel-/Reisebereitschaft (Ja / Nein)."
+                },
+                {
+                    "key": "noticeperiod",
+                    "type": "scalar",
+                    "description": "Kündigungsfrist."
+                },
+                {
+                    "key": "currentansalary",
+                    "type": "scalar",
+                    "description": "Aktuelles Bruttojahresgehalt."
+                },
+                {
+                    "key": "expectedansalary",
+                    "type": "scalar",
+                    "description": "Erwartetes Bruttojahresgehalt."
+                },
+                {
+                    "key": "education",
+                    "type": "scalar",
+                    "description": "Ausbildung und Studium."
+                },
+                {
+                    "key": "workinghours",
+                    "type": "scalar",
+                    "description": "Vertragliche Arbeitszeit."
+                },
+                {
+                    "key": "relevantposlist",
+                    "type": "list",
+                    "description": "Vorherige relevante Positionen (manuell gepflegt)."
+                },
+                {
+                    "key": "relevantfortargetposlist",
+                    "type": "list",
+                    "description": "Für die Zielposition relevante Erfahrung (Direct Reports, P&L, Store-Fläche…)."
+                },
+                {
+                    "key": "languageslist",
+                    "type": "list",
+                    "description": "Sprachkenntnisse mit Level."
+                },
+                {
+                    "key": "benefitslist",
+                    "type": "list",
+                    "description": "Benefits (Firmenwagen, Bonus, bAV…)."
+                },
+                {
+                    "key": "otherskillslist",
+                    "type": "list",
+                    "description": "Sonstige Kenntnisse (Tools, Software, Zertifikate)."
+                },
+                {
+                    "key": "checkb.moving.yes",
+                    "type": "checkbox",
+                    "description": "Umzugsbereitschaft Ja."
+                },
+                {
+                    "key": "checkb.moving.no",
+                    "type": "checkbox",
+                    "description": "Umzugsbereitschaft Nein."
+                },
+                {
+                    "key": "checkb.commute.yes",
+                    "type": "checkbox",
+                    "description": "Pendelbereitschaft Ja."
+                },
+                {
+                    "key": "checkb.commute.no",
+                    "type": "checkbox",
+                    "description": "Pendelbereitschaft Nein."
+                },
+                {
+                    "key": "checkb.travel.yes",
+                    "type": "checkbox",
+                    "description": "Reisebereitschaft Ja."
+                },
+                {
+                    "key": "checkb.travel.no",
+                    "type": "checkbox",
+                    "description": "Reisebereitschaft Nein."
+                },
+                {
+                    "key": "optional.firmenwagen",
+                    "type": "optional",
+                    "description": "Nur ausgeben, wenn Firmenwagen im Formular aktiviert."
+                },
+                {
+                    "key": "stations.employer.N",
+                    "type": "station",
+                    "description": "Arbeitgeber pro Station."
+                },
+                {
+                    "key": "stations.time.N",
+                    "type": "station",
+                    "description": "Zeitraum pro Station."
+                },
+                {
+                    "key": "stations.positions.N",
+                    "type": "station",
+                    "description": "Berufsbezeichnung pro Station."
+                },
+                {
+                    "key": "stations.details.N",
+                    "type": "station",
+                    "description": "Detailtexte pro Station (multi-line mit Datumsheadern und Bullets)."
+                }
+            ]
+        }
+    ],
+    "datasets": [
+        {
+            "collection": "fashion-executive-profiles",
+            "collection_id": 1,
+            "name": "Lena Hartmann",
+            "slug": "lena-hartmann",
+            "scalars": {
+                "target-position": "Head of Brand Marketing Fashion DACH",
+                "month": "April",
+                "year": "2026",
+                "fullname": "Lena Hartmann",
+                "address1": "Kastanienallee 42",
+                "address2": "Düsseldorf",
+                "zip": "40233",
+                "birthdate": "14.06.1984",
+                "nationality": "deutsch",
+                "maritalstatus": "verheiratet, 1 Kind",
+                "number": "+49 171 5540987",
+                "email": "lena.hartmann@example.de",
+                "currentposition": "Head of Brand Marketing bei Moda Rhein AG",
+                "moving": "Ja",
+                "travelorcommute": "Ja",
+                "noticeperiod": "3 Monate zum Quartalsende",
+                "currentansalary": "EUR 112.000 brutto p.a. + 18% Bonus",
+                "expectedansalary": "EUR 135.000 brutto p.a. + 20% Bonus",
+                "education": "Diplom-Betriebswirtin (FH), Schwerpunkt Marketing — Hochschule Pforzheim, 2008",
+                "workinghours": "40 Std./Woche, Vollzeit"
+            },
+            "checkboxes": {
+                "moving": "yes",
+                "commute": "yes",
+                "travel": "yes"
+            },
+            "optional": {
+                "firmenwagen": "BMW 3er Touring, auch privat nutzbar"
+            },
+            "lists": {
+                "relevantposlist": [
+                    "Head of Brand Marketing — Moda Rhein AG",
+                    "Senior Brand Manager Womenswear — Nordstern Textilwerke GmbH",
+                    "Marketing Manager Lifestyle — Hamburg Retail Fashion AG"
+                ],
+                "relevantfortargetposlist": [
+                    "12 Direct Reports (Category, Content, Social, PR)",
+                    "Marketing-Budget 8,5 Mio EUR p.a.",
+                    "P&L-Mitverantwortung 180 Mio EUR Umsatz",
+                    "Verantwortlich für 24 Retail-Flächen in 6 Ländern",
+                    "Einstellungs- und Kündigungsverantwortung für das Marketingteam"
+                ],
+                "languageslist": [
+                    "Deutsch (Muttersprache)",
+                    "Englisch (verhandlungssicher, C2)",
+                    "Französisch (fließend, C1)",
+                    "Italienisch (konversationsfähig, B1)"
+                ],
+                "benefitslist": [
+                    "Firmenwagen (Mittelklasse, privat)",
+                    "Variable Vergütung 18%",
+                    "Betriebliche Altersvorsorge (10% AG-Zuschuss)",
+                    "30 Urlaubstage + 2 Brauchtumstage",
+                    "Home-Office 2 Tage/Woche",
+                    "Mitarbeiterrabatt 40%"
+                ],
+                "otherskillslist": [
+                    "Adobe Creative Cloud (Power User)",
+                    "Salesforce Marketing Cloud",
+                    "Google Analytics 4 / Looker Studio",
+                    "SAP ERP (Modul SD/MM)",
+                    "Fashion-GDS (TradeBeyond, NuORDER)"
+                ]
+            },
+            "stations": [
+                {
+                    "time": "03/2022 – heute",
+                    "employer": "Moda Rhein AG, Düsseldorf",
+                    "positions": "Head of Brand Marketing",
+                    "details": "03/2022 – heute\nHead of Brand Marketing DACH\n- Globale Markenstrategie für 4 Fashion-Labels mit 180 Mio EUR Umsatz\n- Führung eines 12-köpfigen Marketingteams über 3 Standorte\n- Relaunch der Hauptmarke 2023 mit +22% Markenbekanntheit\n- Budgetverantwortung 8,5 Mio EUR p.a."
+                },
+                {
+                    "time": "05/2018 – 02/2022",
+                    "employer": "Nordstern Textilwerke GmbH, Münster",
+                    "positions": "Senior Brand Manager Womenswear",
+                    "details": "05/2018 – 02/2022\nSenior Brand Manager Womenswear\n- Kategorieverantwortung Womenswear (EUR 65 Mio Umsatz)\n- Aufbau Social-Commerce-Kanäle (Instagram, TikTok) auf 950k Follower\n- Einführung eines saisonalen Kollaborations-Formats mit 4 Designerinnen\n- Kampagnenführung in 12 europäischen Märkten"
+                },
+                {
+                    "time": "09/2014 – 04/2018",
+                    "employer": "Hamburg Retail Fashion AG, Hamburg",
+                    "positions": "Marketing Manager Lifestyle",
+                    "details": "09/2014 – 04/2018\nMarketing Manager Lifestyle\n- Omni-Channel-Kampagnen für 45 Stores in DE/AT\n- Einführung CRM-gestützter Kundensegmentierung (+18% Wiederkauf)\n- POS-Konzept für Flagship Hamburg Mönckebergstraße"
+                }
+            ]
+        },
+        {
+            "collection": "fashion-executive-profiles",
+            "collection_id": 1,
+            "name": "Maximilian Graf",
+            "slug": "maximilian-graf",
+            "scalars": {
+                "target-position": "Director E-Commerce & Digital Fashion",
+                "month": "April",
+                "year": "2026",
+                "fullname": "Maximilian Graf",
+                "address1": "Isarstraße 18",
+                "address2": "München",
+                "zip": "80469",
+                "birthdate": "02.11.1979",
+                "nationality": "deutsch / österreichisch",
+                "maritalstatus": "ledig",
+                "number": "+49 160 7788301",
+                "email": "max.graf@example.de",
+                "currentposition": "Head of E-Commerce bei Schmidt & Falkenberg Fashion",
+                "moving": "Nein",
+                "travelorcommute": "Ja",
+                "noticeperiod": "6 Monate zum Halbjahresende",
+                "currentansalary": "EUR 138.000 brutto p.a. + 25% Bonus",
+                "expectedansalary": "EUR 165.000 brutto p.a. + 25–30% Bonus",
+                "education": "Master of Science, Wirtschaftsinformatik — TU München, 2005",
+                "workinghours": "40 Std./Woche, Vollzeit mit flexiblem Home-Office"
+            },
+            "checkboxes": {
+                "moving": "no",
+                "commute": "yes",
+                "travel": "yes"
+            },
+            "optional": {
+                "firmenwagen": "Audi A6 Avant e-tron"
+            },
+            "lists": {
+                "relevantposlist": [
+                    "Head of E-Commerce — Schmidt & Falkenberg Fashion (seit 2019)",
+                    "Senior E-Commerce Manager — Beckert Mode GmbH (2014–2019)",
+                    "Online Marketing Lead — Aachener Couture Group (2010–2014)"
+                ],
+                "relevantfortargetposlist": [
+                    "9 Direct Reports, 42 FTE im Digital-Bereich",
+                    "Online-Umsatzverantwortung 95 Mio EUR p.a.",
+                    "Conversion-Rate-Steigerung +38% in 3 Jahren",
+                    "Replatforming Shopware 6 → Commercetools geleitet",
+                    "BR-erfahren (Einführung Betriebsvereinbarung Home-Office)"
+                ],
+                "languageslist": [
+                    "Deutsch (Muttersprache)",
+                    "Englisch (verhandlungssicher, C2)",
+                    "Spanisch (fließend, B2)"
+                ],
+                "benefitslist": [
+                    "Firmenwagen (Oberklasse, privat)",
+                    "Variable Vergütung 25%",
+                    "Aktienoptionsprogramm",
+                    "bAV mit Entgeltumwandlung",
+                    "30 Urlaubstage",
+                    "Mobiles Arbeiten 3 Tage/Woche"
+                ],
+                "otherskillslist": [
+                    "Commercetools, Shopware 6, Shopify Plus",
+                    "SAP Hybris Commerce",
+                    "Adobe Analytics, Tealium",
+                    "A/B-Testing (Optimizely, VWO)",
+                    "Agile Leadership (Scrum@Scale zertifiziert)"
+                ]
+            },
+            "stations": [
+                {
+                    "time": "04/2019 – heute",
+                    "employer": "Schmidt & Falkenberg Fashion, München",
+                    "positions": "Head of E-Commerce",
+                    "details": "04/2019 – heute\nHead of E-Commerce\n- Gesamtverantwortung für 9 Online-Shops in 14 Ländern\n- Umsatzwachstum von 38 auf 95 Mio EUR in 4 Jahren\n- Replatforming auf Commercetools-Stack in 11 Monaten\n- Aufbau Customer-Data-Platform und CRM-Automatisierung"
+                },
+                {
+                    "time": "01/2014 – 03/2019",
+                    "employer": "Beckert Mode GmbH, Köln",
+                    "positions": "Senior E-Commerce Manager",
+                    "details": "01/2014 – 03/2019\nSenior E-Commerce Manager\n- Betrieb und Weiterentwicklung des B2C-Shops (EUR 28 Mio Umsatz)\n- Einführung Marketplace-Anbindung (Zalando, About You)\n- Team: 6 FTE Online-Marketing + 3 FTE Shop-Ops"
+                },
+                {
+                    "time": "08/2010 – 12/2013",
+                    "employer": "Aachener Couture Group, Aachen",
+                    "positions": "Online Marketing Lead",
+                    "details": "08/2010 – 12/2013\nOnline Marketing Lead\n- Performance-Marketing DACH (SEA, Paid Social)\n- CRM-Programm von 120k auf 520k aktive Kontakte skaliert"
+                }
+            ]
+        },
+        {
+            "collection": "fashion-executive-profiles",
+            "collection_id": 1,
+            "name": "Sophie Wagner",
+            "slug": "sophie-wagner",
+            "scalars": {
+                "target-position": "Business Unit Director Sportswear & Fashion",
+                "month": "April",
+                "year": "2026",
+                "fullname": "Sophie Wagner",
+                "address1": "Herrnhuter Weg 7",
+                "address2": "Stuttgart",
+                "zip": "70193",
+                "birthdate": "29.03.1976",
+                "nationality": "deutsch",
+                "maritalstatus": "verheiratet, 2 Kinder",
+                "number": "+49 175 3309921",
+                "email": "sophie.wagner@example.de",
+                "currentposition": "Business Unit Director Sport & Lifestyle bei Stuttgarter Textilhaus KG",
+                "moving": "Ja",
+                "travelorcommute": "Ja",
+                "noticeperiod": "6 Monate zum Quartalsende",
+                "currentansalary": "EUR 168.000 brutto p.a. + 35% Bonus + LTI",
+                "expectedansalary": "EUR 195.000 brutto p.a. + 35–40% Bonus + LTI",
+                "education": "Dipl.-Kauffrau — Universität Mannheim, 2001; INSEAD Executive Programme, 2017",
+                "workinghours": "Vollzeit, 40 Std./Woche"
+            },
+            "checkboxes": {
+                "moving": "yes",
+                "commute": "yes",
+                "travel": "yes"
+            },
+            "optional": {
+                "firmenwagen": "Mercedes GLE 450, Vollausstattung"
+            },
+            "lists": {
+                "relevantposlist": [
+                    "Business Unit Director Sport & Lifestyle — Stuttgarter Textilhaus KG",
+                    "Head of Category Sportswear — Nordstern Textilwerke GmbH",
+                    "Director Buying Sport — Moda Rhein AG"
+                ],
+                "relevantfortargetposlist": [
+                    "18 Direct Reports, 220 FTE Business Unit",
+                    "P&L-Verantwortung EUR 340 Mio Umsatz",
+                    "Store-Fläche gesamt 18.500 m² in DE/AT/CH",
+                    "4 eigene Produktionsstätten in Portugal und Rumänien",
+                    "Langjährige BR-Erfahrung (Großverhandlungen, IG Metall)",
+                    "Einstellungs- und Restrukturierungsverantwortung (2020 Turnaround)"
+                ],
+                "languageslist": [
+                    "Deutsch (Muttersprache)",
+                    "Englisch (verhandlungssicher, C2)",
+                    "Französisch (verhandlungssicher, C1)",
+                    "Portugiesisch (fließend, B2)"
+                ],
+                "benefitslist": [
+                    "Firmenwagen Oberklasse, privat nutzbar",
+                    "Variable Vergütung 35% + LTI",
+                    "Altersvorsorge (12% AG-Zuschuss)",
+                    "30 Urlaubstage + Sabbatical-Option",
+                    "Mitarbeiterrabatt 50%"
+                ],
+                "otherskillslist": [
+                    "SAP S/4HANA (Retail)",
+                    "Dynamics 365 F&O",
+                    "Planning-Tools (Centric PLM, RLM)",
+                    "Category-Management-Zertifikat (ECR Europe)",
+                    "Nachhaltigkeits-Reporting (GRI, CSRD)"
+                ]
+            },
+            "stations": [
+                {
+                    "time": "06/2020 – heute",
+                    "employer": "Stuttgarter Textilhaus KG, Stuttgart",
+                    "positions": "Business Unit Director Sport & Lifestyle",
+                    "details": "06/2020 – heute\nBusiness Unit Director Sport & Lifestyle\n- Gesamtverantwortung BU Sport & Lifestyle (340 Mio EUR Umsatz, 220 FTE)\n- Turnaround der BU: EBIT-Marge von -2% auf +9% in 3 Jahren\n- Neuausrichtung Category-Portfolio (Sportswear, Athleisure, Outdoor)\n- Verhandlung der neuen Rahmenvereinbarung mit dem Gesamtbetriebsrat\n- Aufbau Nachhaltigkeits-Reporting (CSRD-konform ab 2024)\n\n06/2020 – 12/2021\nInterim Geschäftsführung BU Fashion\n- Parallel zur Director-Rolle, 8 Monate interim GF\n- Führung durch Covid-Phase und Supply-Chain-Krise"
+                },
+                {
+                    "time": "02/2015 – 05/2020",
+                    "employer": "Nordstern Textilwerke GmbH, Münster",
+                    "positions": "Head of Category Sportswear",
+                    "details": "02/2015 – 05/2020\nHead of Category Sportswear\n- Kategorie-P&L EUR 140 Mio\n- Launch der Eigenmarke „Nord Active\" (+EUR 22 Mio in 2 Jahren)\n- Einführung Direct-to-Consumer-Kanal mit eigenem Flagship Berlin"
+                },
+                {
+                    "time": "10/2008 – 01/2015",
+                    "employer": "Moda Rhein AG, Düsseldorf",
+                    "positions": "Director Buying Sport",
+                    "details": "10/2008 – 01/2015\nDirector Buying Sport\n- Einkaufsvolumen EUR 85 Mio p.a.\n- Aufbau strategischer Lieferanten in Portugal und Rumänien\n- Führung eines 9-köpfigen Einkaufsteams"
+                }
+            ]
+        },
+        {
+            "collection": "fashion-retail-manager-profiles",
+            "collection_id": 2,
+            "name": "Tobias Krüger",
+            "slug": "tobias-krueger",
+            "scalars": {
+                "target-position": "Store Manager Flagship Berlin Kurfürstendamm",
+                "month": "April",
+                "year": "2026",
+                "fullname": "Tobias Krüger",
+                "address1": "Maximilianstraße 12",
+                "address2": "München",
+                "zip": "80539",
+                "birthdate": "18.08.1988",
+                "nationality": "deutsch",
+                "maritalstatus": "ledig",
+                "number": "+49 152 4412877",
+                "email": "tobias.krueger@example.de",
+                "currentposition": "Store Manager Flagship München Kaufingerstraße",
+                "moving": "Ja",
+                "travelorcommute": "Ja",
+                "noticeperiod": "3 Monate zum Monatsende",
+                "currentansalary": "EUR 62.000 brutto p.a. + 15% Bonus",
+                "expectedansalary": "EUR 78.000 brutto p.a. + 20% Bonus",
+                "education": "Handelsfachwirt (IHK) — Handelskammer München, 2012; Einzelhandelskaufmann, 2009",
+                "workinghours": "40 Std./Woche, 6-Tage-Woche mit rollierenden freien Tagen"
+            },
+            "checkboxes": {
+                "moving": "yes",
+                "commute": "yes",
+                "travel": "yes"
+            },
+            "optional": {
+                "firmenwagen": ""
+            },
+            "lists": {
+                "relevantposlist": [
+                    "Store Manager Flagship München — Beckert Mode GmbH",
+                    "Assistant Store Manager — Hamburg Retail Fashion AG",
+                    "Department Lead Damenoberbekleidung — Moda Rhein AG"
+                ],
+                "relevantfortargetposlist": [
+                    "24 Mitarbeitende (davon 3 Schichtleitungen)",
+                    "Store-Fläche 1.850 m² auf 3 Etagen",
+                    "Jahresumsatz Flagship EUR 14,8 Mio",
+                    "Einstellungs- und Kündigungsverantwortung im Store",
+                    "Aufbau des Visual-Merchandising-Teams"
+                ],
+                "languageslist": [
+                    "Deutsch (Muttersprache)",
+                    "Englisch (fließend, C1)",
+                    "Italienisch (konversationsfähig, B1)"
+                ],
+                "benefitslist": [
+                    "Fahrtkostenzuschuss MVV",
+                    "Variable Vergütung 15% auf Store-KPIs",
+                    "bAV mit 50% AG-Zuschuss",
+                    "28 Urlaubstage",
+                    "Mitarbeiterrabatt 40%",
+                    "Weiterbildungsbudget EUR 1.500 p.a."
+                ],
+                "otherskillslist": [
+                    "Retail-KPI-Steuerung (UPT, ATV, Conversion)",
+                    "Workforce-Management (ATOSS)",
+                    "Visual-Merchandising-Zertifikat (EHI)",
+                    "MS Office 365, SAP Retail",
+                    "Mitarbeiterführung nach GROW-Modell"
+                ]
+            },
+            "stations": [
+                {
+                    "time": "04/2021 – heute",
+                    "employer": "Beckert Mode GmbH, München",
+                    "positions": "Store Manager Flagship Kaufingerstraße",
+                    "details": "04/2021 – heute\nStore Manager Flagship München\n- Führung eines 24-köpfigen Teams inkl. 3 Schichtleitungen\n- Umsatzverantwortung EUR 14,8 Mio p.a., +11% YoY 2024\n- Einführung Clienteling-Programm (+19% Wiederkaufrate)\n- Umbau der Damen-Etage bei laufendem Betrieb durchgeführt"
+                },
+                {
+                    "time": "09/2017 – 03/2021",
+                    "employer": "Hamburg Retail Fashion AG, Hamburg",
+                    "positions": "Assistant Store Manager",
+                    "details": "09/2017 – 03/2021\nAssistant Store Manager, Flagship Mönckebergstraße\n- Stellvertretung des Store Managers (1.400 m², 18 FTE)\n- Verantwortlich für Personaleinsatzplanung und Einarbeitung\n- KPIs: Conversion von 9,8% auf 12,4% gesteigert"
+                },
+                {
+                    "time": "08/2012 – 08/2017",
+                    "employer": "Moda Rhein AG, Düsseldorf",
+                    "positions": "Department Lead Damenoberbekleidung",
+                    "details": "08/2012 – 08/2017\nDepartment Lead Damenoberbekleidung\n- 9 direkte Mitarbeitende\n- Umsatzsteigerung DOB um +22% in 3 Jahren\n- Einführung eines Schulungskonzepts für Neueinsteiger"
+                }
+            ]
+        },
+        {
+            "collection": "fashion-retail-manager-profiles",
+            "collection_id": 2,
+            "name": "Anja Becker",
+            "slug": "anja-becker",
+            "scalars": {
+                "target-position": "Area Manager Retail Süd (DE/AT)",
+                "month": "April",
+                "year": "2026",
+                "fullname": "Anja Becker",
+                "address1": "Rosengartenstraße 5",
+                "address2": "Nürnberg",
+                "zip": "90409",
+                "birthdate": "07.02.1983",
+                "nationality": "deutsch",
+                "maritalstatus": "verheiratet",
+                "number": "+49 163 2298774",
+                "email": "anja.becker@example.de",
+                "currentposition": "District Manager Süddeutschland bei Aachener Couture Group",
+                "moving": "Nein",
+                "travelorcommute": "Ja",
+                "noticeperiod": "3 Monate zum Quartalsende",
+                "currentansalary": "EUR 82.000 brutto p.a. + 18% Bonus",
+                "expectedansalary": "EUR 95.000 brutto p.a. + 20% Bonus",
+                "education": "Bachelor of Arts, Modemanagement — AMD Akademie Düsseldorf, 2007",
+                "workinghours": "Vollzeit, 40 Std./Woche, hoher Reiseanteil"
+            },
+            "checkboxes": {
+                "moving": "no",
+                "commute": "yes",
+                "travel": "yes"
+            },
+            "optional": {
+                "firmenwagen": "VW Passat Variant, Dienstwagen mit Privatnutzung"
+            },
+            "lists": {
+                "relevantposlist": [
+                    "District Manager Süd — Aachener Couture Group (seit 2020)",
+                    "Store Manager — Stuttgarter Textilhaus KG (2015–2020)",
+                    "Assistant Buyer — Nordstern Textilwerke GmbH (2010–2015)"
+                ],
+                "relevantfortargetposlist": [
+                    "11 Stores unter Verantwortung (DE/AT)",
+                    "148 Mitarbeitende indirekt geführt",
+                    "Store-Fläche gesamt 9.200 m²",
+                    "Umsatzverantwortung EUR 42 Mio p.a.",
+                    "Einstellungen und Kündigungen für Store-Manager-Ebene",
+                    "Turnaround von 2 unterperformenden Stores in 18 Monaten"
+                ],
+                "languageslist": [
+                    "Deutsch (Muttersprache)",
+                    "Englisch (verhandlungssicher, C1)",
+                    "Spanisch (B1)"
+                ],
+                "benefitslist": [
+                    "Firmenwagen Mittelklasse, privat nutzbar",
+                    "Variable Vergütung 18% auf Area-KPIs",
+                    "bAV, 10% AG-Zuschuss",
+                    "30 Urlaubstage",
+                    "Reisekostenpauschale"
+                ],
+                "otherskillslist": [
+                    "Multi-Store-KPI-Steuerung",
+                    "Field-Coaching und Training-on-the-Job",
+                    "SAP Retail, Microsoft Dynamics",
+                    "Lean-Retail-Methoden",
+                    "Arbeitsrecht-Grundkenntnisse (SHK-Zertifikat)"
+                ]
+            },
+            "stations": [
+                {
+                    "time": "07/2020 – heute",
+                    "employer": "Aachener Couture Group, Nürnberg (Regionalbüro)",
+                    "positions": "District Manager Süddeutschland",
+                    "details": "07/2020 – heute\nDistrict Manager Süddeutschland\n- 11 Stores in Bayern, BW und Österreich, EUR 42 Mio Umsatz\n- Direkte Führung von 11 Store Managern, 148 FTE indirekt\n- Store-Eröffnung Salzburg (2022) und Augsburg (2024) verantwortet\n- Turnaround-Programm für 2 defizitäre Stores erfolgreich abgeschlossen"
+                },
+                {
+                    "time": "03/2015 – 06/2020",
+                    "employer": "Stuttgarter Textilhaus KG, Stuttgart",
+                    "positions": "Store Manager Flagship Königstraße",
+                    "details": "03/2015 – 06/2020\nStore Manager Flagship Stuttgart Königstraße\n- 1.600 m², 22 FTE, EUR 11 Mio Umsatz\n- Einführung der neuen Store-Rolle „Style Advisor\"\n- ATV-Steigerung +14% durch Personal-Training-Programm"
+                },
+                {
+                    "time": "10/2010 – 02/2015",
+                    "employer": "Nordstern Textilwerke GmbH, Münster",
+                    "positions": "Assistant Buyer Womenswear",
+                    "details": "10/2010 – 02/2015\nAssistant Buyer Womenswear\n- Unterstützung des Einkaufs für 4 Kollektionen p.a.\n- Sortimentsanalyse und Lieferantenbesuche (IT, PT)\n- Wechsel in Retail: Store-Manager-Programm"
+                }
+            ]
+        },
+        {
+            "collection": "fashion-retail-manager-profiles",
+            "collection_id": 2,
+            "name": "David Köhler",
+            "slug": "david-koehler",
+            "scalars": {
+                "target-position": "Visual Merchandising Lead DACH",
+                "month": "April",
+                "year": "2026",
+                "fullname": "David Köhler",
+                "address1": "Talstraße 29",
+                "address2": "Köln",
+                "zip": "50676",
+                "birthdate": "23.09.1986",
+                "nationality": "deutsch",
+                "maritalstatus": "ledig, in Partnerschaft",
+                "number": "+49 177 8823451",
+                "email": "david.koehler@example.de",
+                "currentposition": "Visual Merchandising Manager bei Schmidt & Falkenberg Fashion",
+                "moving": "Ja",
+                "travelorcommute": "Ja",
+                "noticeperiod": "3 Monate zum Monatsende",
+                "currentansalary": "EUR 68.000 brutto p.a. + 10% Bonus",
+                "expectedansalary": "EUR 82.000 brutto p.a. + 12–15% Bonus",
+                "education": "Diplom-Designer (FH), Modedesign — HTW Berlin, 2010",
+                "workinghours": "Vollzeit, 40 Std./Woche, hoher Reiseanteil in DACH"
+            },
+            "checkboxes": {
+                "moving": "yes",
+                "commute": "yes",
+                "travel": "yes"
+            },
+            "optional": {
+                "firmenwagen": "Poolfahrzeug für Dienstreisen"
+            },
+            "lists": {
+                "relevantposlist": [
+                    "Visual Merchandising Manager — Schmidt & Falkenberg Fashion",
+                    "Senior VM Stylist — Moda Rhein AG",
+                    "VM Specialist — Beckert Mode GmbH"
+                ],
+                "relevantfortargetposlist": [
+                    "6 Direct Reports (VM Stylists)",
+                    "Verantwortlich für 38 Stores in DACH",
+                    "Saisonale Window-Konzepte (4 pro Jahr)",
+                    "Budgetverantwortung VM EUR 1,2 Mio p.a.",
+                    "Kollaboration mit Buying und Marketing auf Kollektions-Ebene"
+                ],
+                "languageslist": [
+                    "Deutsch (Muttersprache)",
+                    "Englisch (verhandlungssicher, C1)",
+                    "Französisch (B2)"
+                ],
+                "benefitslist": [
+                    "Reisekosten-Full-Service",
+                    "Variable Vergütung 10%",
+                    "bAV 8% AG-Zuschuss",
+                    "30 Urlaubstage",
+                    "Kreativ-Weiterbildungsbudget EUR 2.000 p.a.",
+                    "Mitarbeiterrabatt 45%"
+                ],
+                "otherskillslist": [
+                    "Adobe Creative Suite (Illustrator, InDesign, Photoshop)",
+                    "SketchUp, Vectorworks (Store-Planung)",
+                    "Retail-Design-Trends und Materialkunde",
+                    "Projektmanagement nach PRINCE2 Foundation",
+                    "Fotografie und Produkt-Styling"
+                ]
+            },
+            "stations": [
+                {
+                    "time": "11/2019 – heute",
+                    "employer": "Schmidt & Falkenberg Fashion, Köln",
+                    "positions": "Visual Merchandising Manager DACH",
+                    "details": "11/2019 – heute\nVisual Merchandising Manager DACH\n- Führung eines 6-köpfigen VM-Teams\n- Konzept und Rollout von 4 Saison-Kampagnen p.a. in 38 Stores\n- Budgetverantwortung EUR 1,2 Mio\n- Entwicklung modularer VM-Elemente (Kosteneinsparung 22%)"
+                },
+                {
+                    "time": "05/2015 – 10/2019",
+                    "employer": "Moda Rhein AG, Düsseldorf",
+                    "positions": "Senior VM Stylist",
+                    "details": "05/2015 – 10/2019\nSenior Visual Merchandising Stylist\n- Umsetzung der Kollektionspräsentation in Flagship-Stores\n- Einarbeitung von 14 neuen VM-Kolleginnen\n- Aufbau VM-Handbuch für das Retail-Netzwerk"
+                },
+                {
+                    "time": "06/2010 – 04/2015",
+                    "employer": "Beckert Mode GmbH, München",
+                    "positions": "Visual Merchandising Specialist",
+                    "details": "06/2010 – 04/2015\nVisual Merchandising Specialist\n- Einstieg nach Diplom in der Zentrale, später Außendienst\n- VM-Support für 12 Stores in Bayern\n- Saisonale Fotoshootings und Look-Dokumentation"
+                }
+            ]
+        }
+    ]
+}
