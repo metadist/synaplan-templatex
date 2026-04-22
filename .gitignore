@@ -8,3 +8,5 @@ tests/fixtures/*.JPG
 tests/fixtures/*.jpg
 tests/fixtures/*.jpeg
 tests/fixtures/*.png
+
+tests/demo/filled/*.docx
