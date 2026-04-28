@@ -1586,6 +1586,51 @@ class TemplateXController extends AbstractController
                 }
             }
 
+            // Checkbox-typed fields: if the template uses the *plain*
+            // `{{moving}}` form (not the `{{checkb.moving.yes/no}}` pair),
+            // `processScalars` would cast PHP bool → "1" / "" which looks
+            // like garbage ("Umzugsbereitschaft 11" when both are true).
+            // Normalize bool values to "Ja" / "Nein" — or whatever the
+            // designer configured (`yes_label` / `no_label`) — BEFORE the
+            // pipeline runs, so the plain form renders as readable text and
+            // the paired `checkb.*.yes/no` form still goes through
+            // processCheckboxes() and gets its ☒ / ☐ glyphs.
+            foreach ($formFields as $field) {
+                if (($field['type'] ?? '') !== 'checkbox' || empty($field['key'])) {
+                    continue;
+                }
+                $k = (string) $field['key'];
+                if (!array_key_exists($k, $variables)) {
+                    continue;
+                }
+                $v = $variables[$k];
+                if (!is_bool($v)) {
+                    // Accept "true"/"false"/"1"/"0"/"ja"/"nein"/"yes"/"no" strings.
+                    if (is_string($v)) {
+                        $vNorm = strtolower(trim($v));
+                        if (in_array($vNorm, ['1', 'true', 'yes', 'ja', 'y', 'on'], true)) {
+                            $v = true;
+                        } elseif (in_array($vNorm, ['0', 'false', 'no', 'nein', 'n', 'off', ''], true)) {
+                            $v = false;
+                        } else {
+                            continue; // leave free text alone
+                        }
+                    } elseif (is_int($v)) {
+                        $v = (bool) $v;
+                    } else {
+                        continue;
+                    }
+                }
+                $designer = $field['designer'] ?? [];
+                $yesLabel = is_string($designer['yes_label'] ?? null) && $designer['yes_label'] !== ''
+                    ? $designer['yes_label']
+                    : 'Ja';
+                $noLabel = is_string($designer['no_label'] ?? null) && $designer['no_label'] !== ''
+                    ? $designer['no_label']
+                    : 'Nein';
+                $variables[$k] = $v ? $yesLabel : $noLabel;
+            }
+
             $arrays = $this->collectArrayData($entry, $formFields);
             $designerMap = $this->getDesignerConfigMap($formFields);
             $richSubfields = $this->getRichRowSubfields($formFields);
@@ -1634,6 +1679,26 @@ class TemplateXController extends AbstractController
                 $arrays,
                 $richSubfields
             );
+
+            // PhpWord TemplateProcessor holds `$macroOpeningChars` and
+            // `$macroClosingChars` in STATIC properties. Its constructor runs
+            // `fixBrokenMacros()` over the whole document.xml using whatever is
+            // currently in those statics. On the first generate() in a fresh
+            // PHP process that's `'${'` / `'}'` (library defaults) — safe. On
+            // every *subsequent* generate() in the same persistent FrankenPHP
+            // / PHP-FPM worker the statics are `'{{'` / `'}}'` (left there by
+            // our own setMacroOpeningChars() call below), and fixBrokenMacros'
+            // regex then greedy-matches drawing-URI GUIDs like
+            //   `<a:ext uri="{28A0092B-…}">…<w:t>{{placeholder}`
+            // as one span, strip_tags() eats the drawing XML, and the
+            // document is left with dangling `</w:t></w:r></w:p>` after the
+            // GUID — Word/LibreOffice then refuse to render it.
+            //
+            // Fix: reset the statics to PhpWord's library defaults *before*
+            // constructing the TemplateProcessor, then re-set them to our
+            // '{{'/'}}' for our own placeholder syntax after construction.
+            (new \ReflectionProperty(TemplateProcessor::class, 'macroOpeningChars'))->setValue(null, '${');
+            (new \ReflectionProperty(TemplateProcessor::class, 'macroClosingChars'))->setValue(null, '}');
 
             $tp = new TemplateProcessor($cleanedPath);
             $tp->setMacroOpeningChars('{{');

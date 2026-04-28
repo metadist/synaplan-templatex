@@ -602,6 +602,43 @@ foreach ($candidates as $slug => $candidate) {
         $variables[$k] = $v;
     }
 
+    // Mirror what `TemplateXController::resolveVariables()` does in
+    // production: for every `type: checkbox` form field whose value is a
+    // bool, auto-generate the paired `checkb.KEY.yes` / `.no` bools that
+    // the glyph-pair templates (both V3 hhff DE/EN and N&H DE/EN) depend
+    // on. Without this, the paired-glyph placeholders in the rebuilt V3
+    // hhff template would fall through to `processScalars` and render as
+    // boolean-coerced "1" / "".
+    foreach ($formFields as $field) {
+        if (($field['type'] ?? '') !== 'checkbox' || empty($field['key'])) {
+            continue;
+        }
+        $k = (string) $field['key'];
+        if (!array_key_exists($k, $variables)) {
+            continue;
+        }
+        $yes = $variables[$k] === true
+            || (is_string($variables[$k]) && in_array(strtolower($variables[$k]), ['ja', 'yes', '1', 'true'], true));
+        $variables['checkb.' . $k . '.yes'] = $yes;
+        $variables['checkb.' . $k . '.no']  = !$yes;
+    }
+
+    // Apply the same Layer-A normalization (bool → "Ja"/"Nein") that the
+    // controller does for plain `{{moving}}` / `{{commute}}` / `{{travel}}`
+    // placeholders. Harmless here (the rebuilt V3 template uses the glyph
+    // pair, not the plain form) but keeps this test honest about the full
+    // candidatesGenerate() semantics.
+    foreach ($formFields as $field) {
+        if (($field['type'] ?? '') !== 'checkbox' || empty($field['key'])) {
+            continue;
+        }
+        $k = (string) $field['key'];
+        if (!array_key_exists($k, $variables) || !is_bool($variables[$k])) {
+            continue;
+        }
+        $variables[$k] = $variables[$k] ? 'Ja' : 'Nein';
+    }
+
     // 2. Copy template → per-candidate working file.
     $work = sys_get_temp_dir() . "/tx_v3_{$slug}.docx";
     copy($templatePath, $work);

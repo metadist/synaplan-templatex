@@ -113,16 +113,71 @@ $COMMON_MAP = [
     'travelorcommute'            => 'commute',
 ];
 
+/**
+ * Checkbox labels per variant and per language. The rewrite pass produces
+ * three rows: "<label> <yes/no glyph pair>" for moving / commute / travel.
+ * Values are chosen to match the wording Ralf uses in the real customer
+ * profiles (Findeisen DE uses "Umzugsbereitschaft / Pendelbereitschaft /
+ * Reisebereitschaft"; Fabri EN uses "Willingness to relocate / Willingness
+ * to commute / Willingness to travel").
+ */
+$CHECKBOX_LABELS = [
+    'hhff' => [
+        'de' => [
+            'moving'  => 'Umzugsbereitschaft',
+            'commute' => 'Pendelbereitschaft',
+            'travel'  => 'Reisebereitschaft',
+            'yes'     => 'Ja',
+            'no'      => 'Nein',
+        ],
+        'en' => [
+            'moving'  => 'Willingness to relocate',
+            'commute' => 'Willingness to commute',
+            'travel'  => 'Willingness to travel',
+            'yes'     => 'Yes',
+            'no'      => 'No',
+        ],
+    ],
+];
+
 foreach ($SOURCES as $job) {
-    rebuildTemplate($job['src'], $job['dst'], $COMMON_MAP, $LIST_KEYS);
+    rebuildTemplate(
+        $job['src'],
+        $job['dst'],
+        $COMMON_MAP,
+        $LIST_KEYS,
+        $job['variant'],
+        detectLangFromPath($job['dst']),
+        $CHECKBOX_LABELS,
+    );
 }
 
 fprintf(STDOUT, "\nV3 build complete.\n");
 
 // -------------------------------------------------------------------------
 
-function rebuildTemplate(string $srcPath, string $dstPath, array $renameMap, array $listKeys): void
+function detectLangFromPath(string $path): string
 {
+    $base = strtolower(basename($path));
+    // Filenames are "… DE v3.docx" / "… EN v3.docx".
+    if (strpos($base, ' de v3') !== false || strpos($base, 'deutsch') !== false) {
+        return 'de';
+    }
+    if (strpos($base, ' en v3') !== false || strpos($base, 'english') !== false || strpos($base, 'englisch') !== false) {
+        return 'en';
+    }
+    return 'de';
+}
+
+function rebuildTemplate(
+    string $srcPath,
+    string $dstPath,
+    array $renameMap,
+    array $listKeys,
+    string $variant = 'hhff',
+    string $lang = 'de',
+    array $checkboxLabels = [],
+): void {
     if (!is_file($srcPath)) {
         fprintf(STDERR, "SKIP %s (not found)\n", $srcPath);
         return;
@@ -148,9 +203,16 @@ function rebuildTemplate(string $srcPath, string $dstPath, array $renameMap, arr
     $xml = file_get_contents($docXml);
     [$newXml, $stats] = rewritePlaceholders($xml, $renameMap);
     [$newXml, $listStats] = normalizeListParagraphs($newXml, $listKeys);
+
+    $cbStats = ['rewritten' => 0, 'skipped' => 'not a candidate variant'];
+    if ($variant === 'hhff' && !empty($checkboxLabels['hhff'][$lang])) {
+        [$newXml, $cbStats] = rewriteHhffCheckboxParagraphs($newXml, $checkboxLabels['hhff'][$lang]);
+    }
+
     file_put_contents($docXml, $newXml);
     $stats['list_paragraphs_normalised'] = $listStats['normalised'];
     $stats['list_pPr_source'] = $listStats['source'];
+    $stats['checkbox_rows_written'] = $cbStats['rewritten'] ?? 0;
 
     if (!is_dir(dirname($dstPath))) {
         mkdir(dirname($dstPath), 0o777, true);
@@ -183,13 +245,177 @@ function rebuildTemplate(string $srcPath, string $dstPath, array $renameMap, arr
     $name = basename($dstPath);
     fprintf(
         STDOUT,
-        "OK  %-38s  renamed=%d paragraphs=%d list_paras_normalised=%d (pPr from %s)\n",
+        "OK  %-38s  renamed=%d paragraphs=%d list_paras_normalised=%d cb_rows=%d (pPr from %s)\n",
         $name,
         $stats['placeholders_renamed'],
         $stats['paragraphs_rewritten'],
         $stats['list_paragraphs_normalised'],
+        $stats['checkbox_rows_written'],
         $stats['list_pPr_source'] ?? 'none',
     );
+}
+
+/**
+ * Rewrite the hhff-variant "Umzugsbereitschaft / Pendel-/Reisebereitschaft"
+ * block.
+ *
+ * The V2 hhff template carries two paragraphs here:
+ *   1) label paragraph:  "Umzugsbereitschaft<tab×N>Pendel-/Reisebereitschaft"
+ *   2) values paragraph: "{{moving}}{{commute}}" (no {{travel}} — a V2 loss
+ *      noted in ANALYSIS-v3.md).
+ *
+ * Those two paragraphs become three rows after this rewrite, each matching
+ * the paired-glyph pattern the real customer profiles (Findeisen) use:
+ *
+ *   <label>  {{checkb.X.yes}} <yes>  {{checkb.X.no}} <no>
+ *
+ * where X ∈ {moving, commute, travel}. The plugin's `processCheckboxes`
+ * swaps the two placeholders to `☒` / `☐` glyphs at generation time.
+ *
+ * We keep the replacement tightly scoped: only paragraphs whose flat text is
+ * exactly "UmzugsbereitschaftPendel-/Reisebereitschaft" (labels) or starts
+ * with "{{moving}}{{commute}}" (values) are touched. Other paragraphs pass
+ * through untouched so the pass is safe to re-run.
+ *
+ * @param string                $xml    full document.xml (post placeholder rename)
+ * @param array<string, string> $labels { moving, commute, travel, yes, no }
+ * @return array{0: string, 1: array{rewritten: int}}
+ */
+function rewriteHhffCheckboxParagraphs(string $xml, array $labels): array
+{
+    $paraPattern = '~<w:p\b[^>]*>.*?</w:p>~s';
+
+    // Find a reference paragraph to reuse its <w:pPr> and run <w:rPr> so the
+    // new paragraphs blend into the template's Arial/24pt/black styling.
+    // We use the paragraph that hosts "{{moving}}{{commute}}" because it
+    // already carries the correct non-bold run properties.
+    $refPPr = null;
+    $refRPr = null;
+
+    if (preg_match_all($paraPattern, $xml, $paras, PREG_OFFSET_CAPTURE)) {
+        foreach ($paras[0] as [$paraXml]) {
+            $flat = '';
+            if (preg_match_all('~<w:t[^>]*>([^<]*)</w:t>~', $paraXml, $tm)) {
+                $flat = implode('', $tm[1]);
+            }
+            if ($flat === '' || strpos($flat, '{{moving}}{{commute}}') !== 0) {
+                continue;
+            }
+            if (preg_match('~<w:pPr\b[^>]*>.*?</w:pPr>~s', $paraXml, $pm)) {
+                $refPPr = $pm[0];
+            }
+            if (preg_match('~<w:r\b[^>]*>\s*<w:rPr\b[^>]*>.*?</w:rPr>~s', $paraXml, $rm)
+                && preg_match('~<w:rPr\b[^>]*>.*?</w:rPr>~s', $rm[0], $rpr)) {
+                $refRPr = $rpr[0];
+            }
+            break;
+        }
+    }
+
+    // Fallback minimal styles if the reference paragraph can't be located —
+    // keeps Word from choking on unstyled runs.
+    if ($refPPr === null) {
+        $refPPr = '<w:pPr><w:jc w:val="both"/></w:pPr>';
+    }
+    if ($refRPr === null) {
+        $refRPr = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>';
+    }
+
+    // Build a paragraph for one checkbox row. Underlined bold label at the
+    // start (matching how the real customer profiles render it), then a few
+    // tabs, then the yes/no glyph-pair placeholders separated by spaces.
+    $boldUnderlineRPr = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:sz w:val="24"/><w:szCs w:val="24"/><w:u w:val="single"/><w:lang w:val="de-DE"/></w:rPr>';
+
+    $buildRow = static function (string $label, string $key, string $yes, string $no) use ($refPPr, $refRPr, $boldUnderlineRPr): string {
+        $escLabel = htmlspecialchars($label, ENT_XML1 | ENT_QUOTES);
+        $escYes = htmlspecialchars($yes, ENT_XML1 | ENT_QUOTES);
+        $escNo = htmlspecialchars($no, ENT_XML1 | ENT_QUOTES);
+
+        return '<w:p>' . $refPPr
+            . '<w:r>' . $boldUnderlineRPr . '<w:t xml:space="preserve">' . $escLabel . '</w:t></w:r>'
+            . '<w:r>' . $refRPr . '<w:tab/><w:tab/><w:tab/></w:r>'
+            . '<w:r>' . $refRPr . '<w:t xml:space="preserve">{{checkb.' . $key . '.yes}} ' . $escYes . '     {{checkb.' . $key . '.no}} ' . $escNo . '</w:t></w:r>'
+            . '</w:p>';
+    };
+
+    $newRows =
+        $buildRow($labels['moving'],  'moving',  $labels['yes'], $labels['no'])
+      . $buildRow($labels['commute'], 'commute', $labels['yes'], $labels['no'])
+      . $buildRow($labels['travel'],  'travel',  $labels['yes'], $labels['no']);
+
+    $rewritten = 0;
+
+    // The V2 label paragraph differs per language and per revision. Rather
+    // than hard-coding exact strings, match any paragraph whose flat text
+    // contains BOTH a word starting with "Umzug…" or "Willingness to
+    // relocate" AND one of the right-column phrases ("Pendel", "commute",
+    // "travel", "Regional flexibility"). That covers the current V2 shapes
+    // in the private hhff repo plus any small future wording tweaks.
+    $labelLeftNeedles  = ['Umzugsbereitschaft', 'Willingness to relocate'];
+    $labelRightNeedles = ['Pendelbereitschaft', 'Pendel-/Reisebereitschaft', 'Regional flexibility', 'Willingness to travel', 'Willingness to commute'];
+
+    $xml = preg_replace_callback(
+        $paraPattern,
+        function (array $m) use (&$rewritten, $newRows, $labelLeftNeedles, $labelRightNeedles): string {
+            $paraXml = $m[0];
+            $flat = '';
+            if (preg_match_all('~<w:t[^>]*>([^<]*)</w:t>~', $paraXml, $tm)) {
+                $flat = implode('', $tm[1]);
+            }
+            // Skip paragraphs that contain other content (e.g. adjacent text
+            // runs with addresses, salary numbers); we only want the two-
+            // labels-only paragraph.
+            if (strlen($flat) > 120 || strpos($flat, '{{') !== false) {
+                return $paraXml;
+            }
+            $leftHit = false;
+            foreach ($labelLeftNeedles as $n) {
+                if (strpos($flat, $n) !== false) { $leftHit = true; break; }
+            }
+            if (!$leftHit) {
+                return $paraXml;
+            }
+            $rightHit = false;
+            foreach ($labelRightNeedles as $n) {
+                if (strpos($flat, $n) !== false) { $rightHit = true; break; }
+            }
+            if (!$rightHit) {
+                return $paraXml;
+            }
+            $rewritten++;
+            return $newRows;
+        },
+        $xml,
+    );
+
+    // Pass 2: delete any paragraph whose flat text is essentially just
+    // "{{moving}}{{commute}}" (with optional whitespace / separators) — the
+    // new rows inserted above already carry those placeholders, so leaving
+    // this paragraph in place would render them a second time.
+    $xml = preg_replace_callback(
+        $paraPattern,
+        function (array $m): string {
+            $paraXml = $m[0];
+            $flat = '';
+            if (preg_match_all('~<w:t[^>]*>([^<]*)</w:t>~', $paraXml, $tm)) {
+                $flat = implode('', $tm[1]);
+            }
+            if (strpos($flat, '{{moving}}') === false || strpos($flat, '{{commute}}') === false) {
+                return $paraXml;
+            }
+            $stripped = preg_replace('~\{\{moving\}\}|\{\{commute\}\}|\s~u', '', $flat);
+            if ($stripped !== '' && $stripped !== null) {
+                // Paragraph carries other text beyond whitespace + those two
+                // placeholders — leave it alone, it's not the V2 values
+                // paragraph.
+                return $paraXml;
+            }
+            return '';
+        },
+        $xml,
+    );
+
+    return [$xml, ['rewritten' => $rewritten]];
 }
 
 /**

@@ -865,6 +865,13 @@ export default {
       .tx-label { display: block; font-size: .8125rem; font-weight: 500; color: var(--txt-primary); margin-bottom: .25rem; }
       .tx-hint { font-size: .75rem; color: var(--txt-secondary); margin-top: .375rem; line-height: 1.4; }
       .tx-badge { display: inline-flex; align-items: center; padding: .125rem .5rem; border-radius: .25rem; font-size: .75rem; font-weight: 500; }
+      .tx-render-badge { display: inline-flex; align-items: center; gap: .25rem; padding: .125rem .5rem; border-radius: .375rem; font-size: .6875rem; font-weight: 500; white-space: nowrap; border: 1px solid transparent; }
+      .tx-render-badge > span[aria-hidden="true"] { font-size: .875rem; line-height: 1; }
+      .tx-badge-list  { background: color-mix(in srgb, var(--brand) 10%, transparent); color: var(--brand); border-color: color-mix(in srgb, var(--brand) 25%, transparent); }
+      .tx-badge-check { background: color-mix(in srgb, var(--status-success, #10b981) 12%, transparent); color: var(--status-success, #10b981); border-color: color-mix(in srgb, var(--status-success, #10b981) 30%, transparent); }
+      .tx-badge-table { background: color-mix(in srgb, var(--status-warning, #f59e0b) 12%, transparent); color: var(--status-warning, #f59e0b); border-color: color-mix(in srgb, var(--status-warning, #f59e0b) 30%, transparent); }
+      .tx-badge-image { background: color-mix(in srgb, var(--status-info, #3b82f6) 12%, transparent); color: var(--status-info, #3b82f6); border-color: color-mix(in srgb, var(--status-info, #3b82f6) 30%, transparent); }
+      .tx-badge-plain { background: var(--bg-chip); color: var(--txt-secondary); border-color: var(--divider); }
       .tx-divider { border-color: var(--divider); }
       .tx-drop { border: 2px dashed var(--divider); border-radius: .5rem; background: var(--bg-card); text-align: center; padding: 1.25rem; cursor: pointer; transition: border-color .15s, background .15s; }
       .tx-drop:hover { border-color: var(--brand); background: var(--brand-alpha-light); }
@@ -1409,6 +1416,35 @@ export default {
       return `<div class="space-y-4">${header}${body}</div>`;
     }
 
+    /**
+     * Small visual hint for each variable row so the user can see what
+     * shape it will render as in the final Word document:
+     *   list     -> one bullet paragraph per item
+     *   checkbox -> \u2612 / \u2610 glyph pair (or "Ja"/"Nein" text fallback)
+     *   table    -> repeating row clone with per-column types
+     *   image    -> embedded <w:drawing>
+     *   other    -> plain inline text substitution
+     */
+    function renderFieldRenderingBadge(fd) {
+      const t = fd.type || "text";
+      const map = {
+        list:     { glyph: "\u2022",   cls: "tx-badge-list"   },
+        checkbox: { glyph: "\u2612",   cls: "tx-badge-check"  },
+        table:    { glyph: "\u229E",   cls: "tx-badge-table"  },
+        image:    { glyph: "\u25A3",   cls: "tx-badge-image"  },
+        textarea: { glyph: "\u00B6",   cls: "tx-badge-plain"  },
+        select:   { glyph: "\u25BC",   cls: "tx-badge-plain"  },
+        date:     { glyph: "\u2637",   cls: "tx-badge-plain"  },
+        number:   { glyph: "#",        cls: "tx-badge-plain"  },
+      };
+      if (!map[t]) return "";
+      const labelText = T(`variables.render_badge_${t}`, T(`variables.type_${t}`, t));
+      return `<span class="tx-render-badge ${map[t].cls}" title="${escHtml(labelText)}">
+        <span aria-hidden="true">${map[t].glyph}</span>
+        <span>${escHtml(labelText)}</span>
+      </span>`;
+    }
+
     function renderVariableEditor(fd, idx) {
       const fields = state.variablesDraft || [];
       const total = fields.length;
@@ -1428,6 +1464,7 @@ export default {
         fd.type,
       );
       const designerOpen = state.expandedDesignerIdx === idx;
+      const badge = renderFieldRenderingBadge(fd);
       return `<div class="tx-row p-3 space-y-2" data-field-idx="${idx}">
         <div class="flex items-start gap-2">
           <div class="flex flex-col gap-0.5 pt-1 flex-shrink-0">
@@ -1450,6 +1487,7 @@ export default {
               <span>${T("variables.field_required")}</span>
             </label>
           </div>
+          ${badge ? `<div class="flex-shrink-0 pt-1">${badge}</div>` : ""}
           <button type="button" data-action="var-remove" data-idx="${idx}" class="p-1 transition-colors" style="color:var(--txt-secondary)" title="${T("variables.remove_field")}">${ICONS.trash}</button>
         </div>
         ${fd.type === "select" ? `<input name="fo_${idx}" value="${escHtml(optsStr)}" placeholder="${T("variables.field_options_hint")}" class="tx-input text-xs" />` : ""}
@@ -1516,16 +1554,34 @@ export default {
         </div>`;
       }
       if (fd.type === "checkbox") {
-        return `<div class="mt-2 p-3 rounded space-y-2" style="background:var(--bg-app)">
+        return `<div class="mt-2 p-3 rounded space-y-3" style="background:var(--bg-app)">
           <p class="text-xs tx-secondary">${T("variables.designer_checkbox_hint")}</p>
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="tx-label">${T("variables.designer_checked_glyph")}</label>
-              <input name="fd_${idx}_checked_glyph" value="${escHtml(d.checked_glyph || "☒")}" class="tx-input text-center" maxlength="4" style="max-width:4rem" />
+          <div>
+            <label class="tx-label">${T("variables.designer_checkbox_glyphs")}</label>
+            <p class="text-xs tx-secondary mb-2" style="margin-top:-.125rem">${T("variables.designer_checkbox_glyphs_hint")}</p>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-xs tx-secondary">${T("variables.designer_checked_glyph")}</label>
+                <input name="fd_${idx}_checked_glyph" value="${escHtml(d.checked_glyph || "☒")}" class="tx-input text-center" maxlength="4" style="max-width:4rem" />
+              </div>
+              <div>
+                <label class="text-xs tx-secondary">${T("variables.designer_unchecked_glyph")}</label>
+                <input name="fd_${idx}_unchecked_glyph" value="${escHtml(d.unchecked_glyph || "☐")}" class="tx-input text-center" maxlength="4" style="max-width:4rem" />
+              </div>
             </div>
-            <div>
-              <label class="tx-label">${T("variables.designer_unchecked_glyph")}</label>
-              <input name="fd_${idx}_unchecked_glyph" value="${escHtml(d.unchecked_glyph || "☐")}" class="tx-input text-center" maxlength="4" style="max-width:4rem" />
+          </div>
+          <div>
+            <label class="tx-label">${T("variables.designer_checkbox_labels")}</label>
+            <p class="text-xs tx-secondary mb-2" style="margin-top:-.125rem">${T("variables.designer_checkbox_labels_hint")}</p>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-xs tx-secondary">${T("variables.designer_yes_label")}</label>
+                <input name="fd_${idx}_yes_label" value="${escHtml(d.yes_label || "")}" placeholder="Ja" class="tx-input" style="max-width:6rem" />
+              </div>
+              <div>
+                <label class="text-xs tx-secondary">${T("variables.designer_no_label")}</label>
+                <input name="fd_${idx}_no_label" value="${escHtml(d.no_label || "")}" placeholder="Nein" class="tx-input" style="max-width:6rem" />
+              </div>
             </div>
           </div>
         </div>`;
@@ -1853,19 +1909,43 @@ export default {
       }
       let matched = 0;
 
+      /**
+       * Human-readable rendering hint for a placeholder in the template:
+       * is it a `{{checkb.X.yes/no}}` glyph pair (pretty) or a plain
+       * `{{X}}` checkbox (renders as text "Ja"/"Nein")? For list / table
+       * types we reuse the rendering-badge glyph so the user gets a
+       * glanceable mode summary.
+       */
+      const modeHintFor = (ph, f) => {
+        const rawKey = (ph.key || ph.name || "").toString();
+        const isGlyphPair = rawKey.startsWith("checkb.");
+        if (f && f.type === "checkbox") {
+          return renderFieldRenderingBadge(f)
+            + (isGlyphPair
+              ? `<span class="tx-hint" style="margin:0 0 0 .5rem">${T("templates.match_checkbox_glyph")}</span>`
+              : `<span class="tx-hint" style="margin:0 0 0 .5rem;color:var(--status-warning,#d97706)">${T("templates.match_checkbox_plain")}</span>`);
+        }
+        if (f) return renderFieldRenderingBadge(f);
+        return "";
+      };
+
       const rows = deduped
         .map((ph) => {
           const f = fieldMap[ph.matchKey];
           const isAdding = state.templateMatchAddKey === ph.matchKey;
           if (f) {
             matched++;
+            const hint = modeHintFor(ph, f);
             return `<tr class="tx-divider border-t">
               <td class="py-2.5 px-3"><span class="font-mono text-sm">${escHtml(ph.key || ph.name)}</span></td>
               <td class="py-2.5 px-3">
-                <span class="inline-flex items-center gap-1.5 text-sm" style="color:var(--status-success)">
-                  ${ICONS.check}
-                  <span class="font-medium">${escHtml(f.label || f.key)}</span>
-                </span>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="inline-flex items-center gap-1.5 text-sm" style="color:var(--status-success)">
+                    ${ICONS.check}
+                    <span class="font-medium">${escHtml(f.label || f.key)}</span>
+                  </span>
+                  ${hint}
+                </div>
               </td>
             </tr>`;
           }
@@ -1919,6 +1999,67 @@ export default {
         ? T("templates.match_all_covered")
         : Tf("templates.match_summary", { matched, total: deduped.length });
 
+      // Health tips — non-blocking, glanceable guidance the user can act on
+      // before generating. Three sources of tips:
+      //   1. A checkbox-typed field whose template uses the plain `{{X}}`
+      //      form instead of the `{{checkb.X.yes/no}}` pair (renders as
+      //      text "Ja/Nein", not \u2612/\u2610 glyphs).
+      //   2. A declared list-typed field with NO matching placeholder in
+      //      the template at all (user added a variable but forgot to use
+      //      it in the Word document).
+      //   3. An image-typed field missing from the template.
+      const tips = [];
+      const phRawKeys = new Set(phs.map((p) => (p.key || p.name || "")));
+      const glyphCbKeys = new Set();
+      for (const raw of phRawKeys) {
+        const m = raw.match(/^checkb\.(.+?)\.(?:yes|no)$/);
+        if (m) glyphCbKeys.add(m[1]);
+      }
+      for (const f of (c.fields || [])) {
+        if (!f.key) continue;
+        const plainUsed = phRawKeys.has(f.key);
+        if (f.type === "checkbox" && plainUsed && !glyphCbKeys.has(f.key)) {
+          tips.push({
+            level: "warn",
+            html: Tf("templates.tip_checkbox_plain", {
+              key: `<code>${escHtml(f.key)}</code>`,
+              pair: `<code>{{checkb.${escHtml(f.key)}.yes}} Ja  {{checkb.${escHtml(f.key)}.no}} Nein</code>`,
+            }),
+          });
+        }
+        if (f.type === "list" && !plainUsed) {
+          tips.push({
+            level: "info",
+            html: Tf("templates.tip_list_unused", {
+              key: `<code>{{${escHtml(f.key)}}}</code>`,
+            }),
+          });
+        }
+        if (f.type === "image" && !plainUsed) {
+          tips.push({
+            level: "info",
+            html: Tf("templates.tip_image_unused", {
+              key: `<code>{{${escHtml(f.key)}}}</code>`,
+            }),
+          });
+        }
+      }
+
+      const tipsHtml = tips.length
+        ? `<div class="mt-3 space-y-1.5">
+            ${tips.map((t) => {
+              const color = t.level === "warn"
+                ? "var(--status-warning,#d97706)"
+                : "var(--txt-secondary)";
+              const icon = t.level === "warn" ? ICONS.warning : ICONS.info || ICONS.question;
+              return `<div class="flex items-start gap-1.5 text-xs" style="color:${color}">
+                ${icon}
+                <span>${t.html}</span>
+              </div>`;
+            }).join("")}
+          </div>`
+        : "";
+
       return `<div class="tx-card p-5 mt-2">
         <div class="flex items-center justify-between mb-3">
           <h4 class="font-medium text-sm">${escHtml(tpl.name)} · ${summary}</h4>
@@ -1935,6 +2076,7 @@ export default {
             <tbody>${rows}</tbody>
           </table>
         </div>
+        ${tipsHtml}
         ${
           structural.length > 0
             ? `<div class="mt-3 text-xs tx-secondary">
@@ -3187,8 +3329,12 @@ export default {
           } else if (fields[idx].type === "checkbox") {
             const ch = fd.get(`fd_${idx}_checked_glyph`)?.toString().trim();
             const un = fd.get(`fd_${idx}_unchecked_glyph`)?.toString().trim();
+            const yl = fd.get(`fd_${idx}_yes_label`)?.toString().trim();
+            const nl = fd.get(`fd_${idx}_no_label`)?.toString().trim();
             if (ch) designer.checked_glyph = ch;
             if (un) designer.unchecked_glyph = un;
+            if (yl) designer.yes_label = yl;
+            if (nl) designer.no_label = nl;
           } else if (fields[idx].type === "image") {
             const w = parseInt(fd.get(`fd_${idx}_width`) || "0", 10);
             const h = parseInt(fd.get(`fd_${idx}_height`) || "0", 10);
